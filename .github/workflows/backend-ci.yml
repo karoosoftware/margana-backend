@@ -55,3 +55,8 @@ jobs:
           test -s ./margana-word-list.txt
           test -s ./horizontal-exclude-words.txt
           test -s ./letter-scores-v3.json
+
+      - name: Verify artifact bucket write access
+        run: |
+          echo "oidc-ok" > ./oidc-check.txt
+          aws s3 cp ./oidc-check.txt "s3://$BUILD_ARTIFACTS_BUCKET/backend/oidc-check.txt"
