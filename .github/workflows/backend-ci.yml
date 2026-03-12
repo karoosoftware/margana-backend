@@ -46,7 +46,12 @@ jobs:
           aws s3api head-bucket --bucket "$STATIC_ASSETS_BUCKET"
           aws s3api head-bucket --bucket "$BUILD_ARTIFACTS_BUCKET"
 
-      - name: Download canonical word list
+      - name: Download canonical backend assets
         run: |
           aws s3 cp "s3://$STATIC_ASSETS_BUCKET/margana-word-list.txt" ./margana-word-list.txt
+          aws s3 cp "s3://$STATIC_ASSETS_BUCKET/horizontal-exclude-words.txt" ./horizontal-exclude-words.txt
+          aws s3 cp "s3://$STATIC_ASSETS_BUCKET/letter-scores-v3.json" ./letter-scores-v3.json
+
           test -s ./margana-word-list.txt
+          test -s ./horizontal-exclude-words.txt
+          test -s ./letter-scores-v3.json
