@@ -194,23 +194,32 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Optionally add formatting/linting later, but the minimum requirement for Phase 2.2 is test execution.
 
     **Phase 2.2.6: Package Lambda artifacts**
-    -   Build deployable `.zip` packages for each Lambda entrypoint.
-    -   Include:
-        -   the Lambda handler file from `python/lambdas/`,
-        -   shared internal packages under `python/`,
+    -   Build deployable Lambda artifacts using a shared-layer model.
+    -   Produce:
+        -   one shared Lambda Layer artifact for common Python runtime code and assets,
+        -   one thin handler `.zip` per Lambda entrypoint under `python/lambdas/`.
+    -   The shared layer should include:
+        -   shared internal packages required by deployed Lambdas such as `margana_score`, `margana_metrics`, and `margana_costing`,
         -   third-party runtime dependencies,
-        -   bundled runtime assets such as `python/margana_score/data/margana-word-list.txt` where required.
+        -   bundled runtime assets such as `python/margana_score/data/margana-word-list.txt`,
+        -   other package-scoped runtime config such as `python/margana_metrics/badge-milestones.json`.
+    -   The thin handler zip should include only the specific Lambda handler file and any minimal bootstrap/wrapper needed for handler naming.
     -   Exclude `python/ecs/` jobs from Lambda packaging.
-    -   Decide whether packaging is done:
-        -   as one artifact per Lambda, or
-        -   as a shared layer plus slim handler zips.
+    -   Avoid duplicating shared internal packages across every handler zip when they are already provided by the shared layer.
     -   Keep the packaging output deterministic and suitable for reuse by Terraform.
+    -   Status (2026-03-12): packaging approach chosen; use a shared Lambda Layer plus thin handler zips.
+    -   Current repo source of truth: see `docs/deployment-inventory.md` for shared layer contents and handler-to-layer expectations.
+    -   Current stopping point / handoff note (2026-03-12):
+        -   a first workflow draft that packaged full per-Lambda zips was explored,
+        -   artifact inspection showed each zip incorrectly contained all Lambda handlers because the project install pulled in the full `python/lambdas/` package,
+        -   that approach is not the intended design and should be replaced rather than refined.
 
     **Phase 2.2.7: Publish artifacts to S3**
-    -   Upload generated Lambda `.zip` files to the Build Artifacts bucket.
+    -   Upload generated Lambda handler `.zip` files and the shared layer `.zip` to the Build Artifacts bucket.
     -   Use a predictable S3 key structure, for example by repository, branch/environment, and commit SHA.
     -   Capture artifact names/paths as workflow outputs so they can be consumed by later deployment steps.
     -   Ensure uploaded artifacts are immutable or versioned enough to support traceable deployments.
+    -   Status (2026-03-12): not yet implemented with the shared-layer model.
 
     **Phase 2.2.8: Define workflow triggers and release behavior**
     -   Run validation on pull requests.
@@ -231,7 +240,7 @@ To ensure a smooth transition without breaking the existing application, the mig
         -   download the word list,
         -   install dependencies,
         -   run tests,
-        -   package the backend Lambdas,
+        -   package the backend Lambdas using the shared-layer plus thin-handler model,
         -   upload the artifacts to the Build Artifacts bucket.
     -   No long-lived AWS access keys are required in GitHub.
     -   The generated artifact locations are stable enough for infrastructure integration in Phase 2.3.

@@ -33,7 +33,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 # Look for Python packages in the 'python/' directory
-where = ["python"]
+where = ["layer-root/python"]
 
 [tool.setuptools.package-data]
 # Specifically include data files needed at runtime (e.g., word lists, templates)
@@ -41,6 +41,6 @@ where = ["python"]
 
 [tool.pytest.ini_options]
 # Configuration for running tests
-testpaths = ["python/tests"]
-pythonpath = ["python"]
+testpaths = ["tests"]
+pythonpath = ["layer-root/python", "."]
 addopts = "-ra -q"

@@ -47,11 +47,11 @@ jobs:
 
       - name: Download Lambda runtime assets
         run: |
-          mkdir -p python/margana_score/data
+          mkdir -p layer-root/python/margana_score/data
           aws s3 cp \
             "s3://$STATIC_ASSETS_BUCKET/margana-word-list.txt" \
-            "python/margana_score/data/margana-word-list.txt"
-          test -s "python/margana_score/data/margana-word-list.txt"
+            "layer-root/python/margana_score/data/margana-word-list.txt"
+          test -s "layer-root/python/margana_score/data/margana-word-list.txt"
 
       - name: Install dependencies
         run: |
@@ -61,80 +61,33 @@ jobs:
       - name: Run tests
         run: pytest
 
-      - name: Build Lambda artifacts
+      - name: Build shared layer artifact
         run: |
           set -euo pipefail
 
           ARTIFACT_ROOT="$RUNNER_TEMP/lambda-artifacts"
-          STAGING_ROOT="$RUNNER_TEMP/lambda-build"
-          DEP_ROOT="$RUNNER_TEMP/lambda-deps"
+          LAYER_ROOT="$RUNNER_TEMP/shared-layer"
           SHA_SHORT="${GITHUB_SHA::7}"
+          LAYER_ARTIFACT_NAME="shared-python-deps-layer__${SHA_SHORT}.zip"
+          LAYER_ARTIFACT_PATH="$ARTIFACT_ROOT/$LAYER_ARTIFACT_NAME"
 
-          rm -rf "$ARTIFACT_ROOT" "$STAGING_ROOT" "$DEP_ROOT"
-          mkdir -p "$ARTIFACT_ROOT" "$STAGING_ROOT" "$DEP_ROOT"
+          rm -rf "$ARTIFACT_ROOT" "$LAYER_ROOT"
+          mkdir -p "$ARTIFACT_ROOT" "$LAYER_ROOT/python"
 
-          python -m pip install . --target "$DEP_ROOT"
+          python -m pip install --no-deps . --target "$LAYER_ROOT/python"
+          python -m pip install "boto3>=1.28,<2.0" --target "$LAYER_ROOT/python"
 
-          lambda_names=(
-            "process-margana-results"
-            "athena-events-parquet-runner"
-            "authorizer"
-            "cognito-delete-user-audit"
-            "dashboard-summary"
-            "leaderboard-service"
-            "leaderboard-snapshot"
-            "margana-metric"
-            "post-confirmation-action"
-            "pre-auth-approval"
-            "profile-service"
-            "send-friend-invite"
-            "submission"
-            "terms-audit"
-            "user-settings"
-            "weekly-seeder"
-            "ses-sns-events-notification"
+          test -s "$LAYER_ROOT/python/margana_metrics/badge-milestones.json"
+          test -s "$LAYER_ROOT/python/margana_score/data/margana-word-list.txt"
+
+          (
+            cd "$LAYER_ROOT"
+            zip -qr "$LAYER_ARTIFACT_PATH" python
           )
 
-          lambda_sources=(
-            "python/lambdas/lambda-process-margana-results.py"
-            "python/lambdas/lambda_athena_events_parquet_runner.py"
-            "python/lambdas/lambda_authorizer.py"
-            "python/lambdas/lambda_cognito_delete_user_audit.py"
-            "python/lambdas/lambda_dashboard_summary.py"
-            "python/lambdas/lambda_leaderboard_service.py"
-            "python/lambdas/lambda_leaderboard_snapshot.py"
-            "python/lambdas/lambda_margana_metric.py"
-            "python/lambdas/lambda_post_confirmation_action.py"
-            "python/lambdas/lambda_pre_auth_approval.py"
-            "python/lambdas/lambda_profile_service.py"
-            "python/lambdas/lambda_send_friend_invite.py"
-            "python/lambdas/lambda_submission.py"
-            "python/lambdas/lambda_terms_audit.py"
-            "python/lambdas/lambda_user_settings.py"
-            "python/lambdas/process_weekly_seeder.py"
-            "python/lambdas/ses_sns_events_notification.py"
-          )
+          printf '%s\n' "$LAYER_ARTIFACT_NAME" > "$RUNNER_TEMP/artifact-list.txt"
 
-          for idx in "${!lambda_names[@]}"; do
-            logical_name="${lambda_names[$idx]}"
-            source_file="${lambda_sources[$idx]}"
-            stage_dir="$STAGING_ROOT/$logical_name"
-            artifact_name="${logical_name}__${SHA_SHORT}.zip"
-            artifact_path="$ARTIFACT_ROOT/$artifact_name"
-
-            mkdir -p "$stage_dir"
-            cp -R "$DEP_ROOT"/. "$stage_dir"/
-            cp "$source_file" "$stage_dir"/
-
-            (
-              cd "$stage_dir"
-              zip -qr "$artifact_path" .
-            )
-          done
-
-          ls -1 "$ARTIFACT_ROOT" > "$RUNNER_TEMP/artifact-list.txt"
-
-      - name: Upload Lambda artifacts to S3
+      - name: Upload shared layer artifact to S3
         run: |
           set -euo pipefail
 
