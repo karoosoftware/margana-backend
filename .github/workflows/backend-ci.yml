@@ -45,3 +45,8 @@ jobs:
         run: |
           aws s3api head-bucket --bucket "$STATIC_ASSETS_BUCKET"
           aws s3api head-bucket --bucket "$BUILD_ARTIFACTS_BUCKET"
+
+      - name: Download canonical word list
+        run: |
+          aws s3 cp "s3://$STATIC_ASSETS_BUCKET/margana-word-list.txt" ./margana-word-list.txt
+          test -s ./margana-word-list.txt
