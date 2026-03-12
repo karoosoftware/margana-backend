@@ -19,18 +19,12 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION }}
       STATIC_ASSETS_BUCKET: ${{ vars.STATIC_ASSETS_BUCKET }}
       BUILD_ARTIFACTS_BUCKET: ${{ vars.BUILD_ARTIFACTS_BUCKET }}
+      BUILD_ARTIFACTS_PREFIX: ${{ vars.BUILD_ARTIFACTS_PREFIX }}
+      PYTHON_VERSION: "3.12"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Show GitHub context
-        run: |
-          echo "repository=${{ github.repository }}"
-          echo "event_name=${{ github.event_name }}"
-          echo "ref=${{ github.ref }}"
-          echo "ref_name=${{ github.ref_name }}"
-          echo "actor=${{ github.actor }}"
 
       - name: Configure AWS credentials from GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -46,17 +40,110 @@ jobs:
           aws s3api head-bucket --bucket "$STATIC_ASSETS_BUCKET"
           aws s3api head-bucket --bucket "$BUILD_ARTIFACTS_BUCKET"
 
-      - name: Download canonical backend assets
-        run: |
-          aws s3 cp "s3://$STATIC_ASSETS_BUCKET/margana-word-list.txt" ./margana-word-list.txt
-          aws s3 cp "s3://$STATIC_ASSETS_BUCKET/horizontal-exclude-words.txt" ./horizontal-exclude-words.txt
-          aws s3 cp "s3://$STATIC_ASSETS_BUCKET/letter-scores-v3.json" ./letter-scores-v3.json
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-          test -s ./margana-word-list.txt
-          test -s ./horizontal-exclude-words.txt
-          test -s ./letter-scores-v3.json
-
-      - name: Verify artifact bucket write access
+      - name: Download Lambda runtime assets
         run: |
-          echo "oidc-ok" > ./oidc-check.txt
-          aws s3 cp ./oidc-check.txt "s3://$BUILD_ARTIFACTS_BUCKET/backend/oidc-check.txt"
+          mkdir -p python/margana_score/data
+          aws s3 cp \
+            "s3://$STATIC_ASSETS_BUCKET/margana-word-list.txt" \
+            "python/margana_score/data/margana-word-list.txt"
+          test -s "python/margana_score/data/margana-word-list.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev]"
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build Lambda artifacts
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_ROOT="$RUNNER_TEMP/lambda-artifacts"
+          STAGING_ROOT="$RUNNER_TEMP/lambda-build"
+          DEP_ROOT="$RUNNER_TEMP/lambda-deps"
+          SHA_SHORT="${GITHUB_SHA::7}"
+
+          rm -rf "$ARTIFACT_ROOT" "$STAGING_ROOT" "$DEP_ROOT"
+          mkdir -p "$ARTIFACT_ROOT" "$STAGING_ROOT" "$DEP_ROOT"
+
+          python -m pip install . --target "$DEP_ROOT"
+
+          lambda_names=(
+            "process-margana-results"
+            "athena-events-parquet-runner"
+            "authorizer"
+            "cognito-delete-user-audit"
+            "dashboard-summary"
+            "leaderboard-service"
+            "leaderboard-snapshot"
+            "margana-metric"
+            "post-confirmation-action"
+            "pre-auth-approval"
+            "profile-service"
+            "send-friend-invite"
+            "submission"
+            "terms-audit"
+            "user-settings"
+            "weekly-seeder"
+            "ses-sns-events-notification"
+          )
+
+          lambda_sources=(
+            "python/lambdas/lambda-process-margana-results.py"
+            "python/lambdas/lambda_athena_events_parquet_runner.py"
+            "python/lambdas/lambda_authorizer.py"
+            "python/lambdas/lambda_cognito_delete_user_audit.py"
+            "python/lambdas/lambda_dashboard_summary.py"
+            "python/lambdas/lambda_leaderboard_service.py"
+            "python/lambdas/lambda_leaderboard_snapshot.py"
+            "python/lambdas/lambda_margana_metric.py"
+            "python/lambdas/lambda_post_confirmation_action.py"
+            "python/lambdas/lambda_pre_auth_approval.py"
+            "python/lambdas/lambda_profile_service.py"
+            "python/lambdas/lambda_send_friend_invite.py"
+            "python/lambdas/lambda_submission.py"
+            "python/lambdas/lambda_terms_audit.py"
+            "python/lambdas/lambda_user_settings.py"
+            "python/lambdas/process_weekly_seeder.py"
+            "python/lambdas/ses_sns_events_notification.py"
+          )
+
+          for idx in "${!lambda_names[@]}"; do
+            logical_name="${lambda_names[$idx]}"
+            source_file="${lambda_sources[$idx]}"
+            stage_dir="$STAGING_ROOT/$logical_name"
+            artifact_name="${logical_name}__${SHA_SHORT}.zip"
+            artifact_path="$ARTIFACT_ROOT/$artifact_name"
+
+            mkdir -p "$stage_dir"
+            cp -R "$DEP_ROOT"/. "$stage_dir"/
+            cp "$source_file" "$stage_dir"/
+
+            (
+              cd "$stage_dir"
+              zip -qr "$artifact_path" .
+            )
+          done
+
+          ls -1 "$ARTIFACT_ROOT" > "$RUNNER_TEMP/artifact-list.txt"
+
+      - name: Upload Lambda artifacts to S3
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_ROOT="$RUNNER_TEMP/lambda-artifacts"
+          SHA_SHORT="${GITHUB_SHA::7}"
+          S3_PREFIX="${BUILD_ARTIFACTS_PREFIX}/preprod/${SHA_SHORT}"
+
+          while IFS= read -r artifact_name; do
+            aws s3 cp \
+              "$ARTIFACT_ROOT/$artifact_name" \
+              "s3://$BUILD_ARTIFACTS_BUCKET/$S3_PREFIX/$artifact_name"
+          done < "$RUNNER_TEMP/artifact-list.txt"

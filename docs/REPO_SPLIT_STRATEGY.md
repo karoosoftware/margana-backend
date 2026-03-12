@@ -134,15 +134,37 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Create a dedicated IAM role for this repository to assume from GitHub Actions.
     -   Restrict the IAM role trust policy to this repository and the intended branch/environment using the GitHub `sub` claim.
     -   Grant the role the minimum required permissions:
-        -   read access to the Static Assets bucket,
-        -   write access to the Build Artifacts bucket,
-        -   any additional read-only access needed for build metadata.
+        -   read access to the required canonical objects in the Static Assets bucket,
+        -   write access to the `backend/` prefix in the Build Artifacts bucket,
+        -   bucket-level access needed for validation checks.
     -   Avoid storing long-lived AWS credentials in GitHub secrets.
-    -   Next repo-side deliverables:
-        -   add `.github/workflows/backend-ci.yml`,
-        -   configure workflow `permissions` with `id-token: write`,
-        -   assume AWS credentials via GitHub OIDC instead of static secrets,
-        -   document required role ARN, bucket names, and environment/repository variables.
+    -   Status (2026-03-12): preprod implementation complete and verified.
+    -   Completed preprod setup:
+        -   AWS IAM OIDC provider created for `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`.
+        -   GitHub Actions role created: `arn:aws:iam::992468223519:role/margana-github-backend-preprod`.
+        -   Trust policy verified for GitHub Environment-based subject matching:
+            -   `repo:karoosoftware/margana-backend:environment:preprod`
+        -   GitHub Environment variables configured in `karoosoftware/margana-backend` for `preprod`:
+            -   `AWS_GITHUB_ACTIONS_ROLE_ARN`
+            -   `AWS_REGION`
+            -   `STATIC_ASSETS_BUCKET`
+            -   `BUILD_ARTIFACTS_BUCKET`
+            -   `BUILD_ARTIFACTS_PREFIX`
+        -   Workflow authentication verified from GitHub Actions using `aws-actions/configure-aws-credentials`.
+        -   Successful `aws sts get-caller-identity` run confirmed role assumption from GitHub Actions.
+        -   Successful read test from `margana-static-assets-preprod` confirmed access to `margana-word-list.txt`.
+        -   Successful write test to `margana-build-artifacts-preprod/backend/oidc-check.txt` confirmed artifact upload permissions.
+    -   Preprod values currently in use:
+        -   `AWS_REGION=eu-west-2`
+        -   `STATIC_ASSETS_BUCKET=margana-static-assets-preprod`
+        -   `BUILD_ARTIFACTS_BUCKET=margana-build-artifacts-preprod`
+        -   `BUILD_ARTIFACTS_PREFIX=backend`
+    -   Implementation note:
+        -   Because the workflow uses a GitHub Environment (`environment: preprod`), the IAM trust policy must match the environment-based GitHub OIDC subject, not only a branch ref such as `refs/heads/main`.
+    -   Remaining work:
+        -   replicate the same pattern for `prod` when required,
+        -   remove temporary workflow diagnostics once backend CI is stable,
+        -   continue with Phase 2.2.3 asset placement and packaging integration.
 
     **Phase 2.2.3: Add build-time word list retrieval**
     -   Download the canonical `margana-word-list.txt` from the Static Assets bucket during the workflow.
@@ -154,6 +176,10 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Keep all canonical build-fetched assets out of Git where they are intended to be supplied by CI/CD.
     -   Ensure the workflow fails clearly if any required asset cannot be retrieved.
     -   Keep test-only fixtures separate from the runtime bundled assets.
+    -   Status (2026-03-12): started in `preprod`; direct S3 retrieval of canonical assets from GitHub Actions has been validated.
+    -   Implementation note (2026-03-12): this phase is being delivered in two passes.
+        -   Pass 1 is Lambda-focused and only fetches `margana-word-list.txt` into `python/margana_score/data/margana-word-list.txt` so Lambda packaging can proceed.
+        -   Pass 2 will add `horizontal-exclude-words.txt` and `letter-scores-v3.json` when ECS/job packaging is implemented.
 
     **Phase 2.2.4: Add repeatable Python environment setup**
     -   Standardize the CI Python version (currently Python 3.12 based on `pyproject.toml`).
