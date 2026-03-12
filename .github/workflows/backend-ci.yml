@@ -1,0 +1,36 @@
+name: Backend CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    environment: preprod
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STATIC_ASSETS_BUCKET: ${{ vars.STATIC_ASSETS_BUCKET }}
+      BUILD_ARTIFACTS_BUCKET: ${{ vars.BUILD_ARTIFACTS_BUCKET }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Verify bucket access
+        run: |
+          aws s3api head-bucket --bucket "$STATIC_ASSETS_BUCKET"
+          aws s3api head-bucket --bucket "$BUILD_ARTIFACTS_BUCKET
