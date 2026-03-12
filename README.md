@@ -3,6 +3,7 @@
 This repository contains the backend and shared data-processing code for Margana. It is the backend/data slice extracted from the original monorepo and now owns the Python packages, backend resources, and email templates needed to generate puzzles, score submissions, and compute player metrics.
 
 The repository split strategy is documented in [docs/REPO_SPLIT_STRATEGY.md](/Users/paulbradbury/IdeaProjects/margana-backend/docs/REPO_SPLIT_STRATEGY.md). Based on that roadmap, Phase 2.1 is complete here: the backend code, resources, and templates have been migrated into this standalone repository.
+The Phase 2.2.1 deployment inventory is documented in [docs/deployment-inventory.md](/Users/paulbradbury/IdeaProjects/margana-backend/docs/deployment-inventory.md).
 
 ## Scope
 
@@ -23,7 +24,9 @@ This repo does not contain:
 
 ```text
 python/
-  margana_gen/       Puzzle generation, usage-log handling, S3 upload/download helpers
+  lambdas/           Lambda handler entrypoints
+  ecs/               Future ECS/job entrypoints for puzzle generation
+  margana_gen/       Shared puzzle generation, usage-log handling, S3 helpers
   margana_score/     Word list loading, score calculation, grid/result building, auth helpers
   margana_metrics/   Metrics aggregation and badge milestone logic
   margana_costing/   DynamoDB capacity / costing log helpers
@@ -34,6 +37,14 @@ docs/                Migration and repository split documentation
 ```
 
 ## Python Packages
+
+### `python/lambdas`
+
+Owns the deployed Lambda handler entrypoints. These files are the serverless entrypoints referenced by infrastructure, while most business logic lives in the shared packages below.
+
+### `python/ecs`
+
+Owns future container/job entrypoints for backend puzzle generation workflows that will move to ECS as the monorepo split progresses.
 
 ### `margana_gen`
 
@@ -137,8 +148,10 @@ AWS access is expected through standard `boto3` credential resolution.
 Per [docs/REPO_SPLIT_STRATEGY.md](/Users/paulbradbury/IdeaProjects/margana-backend/docs/REPO_SPLIT_STRATEGY.md):
 
 - Phase 2.1 is complete: this backend repo has been initialized with `python/`, `resources/`, and `postmarkTemplates/`.
-- The next backend milestones are Phase 2.2 through 2.4:
-  - fetch the canonical word list during CI/CD,
+- Phase 2.2.1 is complete: the deployment inventory is recorded in [docs/deployment-inventory.md](/Users/paulbradbury/IdeaProjects/margana-backend/docs/deployment-inventory.md).
+- The next backend implementation step is Phase 2.2.2: configure GitHub Actions authentication to AWS via OIDC.
+- The remaining backend milestones in Phase 2.2 through 2.4 are:
+  - fetch the canonical build-time assets during CI/CD,
   - run tests in CI,
   - package and publish Lambda artifacts,
   - switch infrastructure to artifact-based Lambda deployment,
@@ -146,5 +159,8 @@ Per [docs/REPO_SPLIT_STRATEGY.md](/Users/paulbradbury/IdeaProjects/margana-backe
 
 ## Current Gaps
 
-- `README.md` has now been added, but CI/CD packaging and deployment steps are not defined in this repo yet.
-- `pytest` was not installed in the current shell environment during this review, so the test suite was not executed here.
+- GitHub Actions CI/CD for packaging and deployment has not been added yet.
+- The next concrete repo-side deliverables are:
+  - `.github/workflows/backend-ci.yml`,
+  - GitHub OIDC authentication to AWS with `id-token: write`,
+  - documented AWS role, bucket, and workflow variable requirements.

@@ -20,7 +20,9 @@ This document outlines the proposed strategy for refactoring the current Margana
 
 ### 2. `margana-backend` (Backend & Data)
 **Contents:**
-- `python/`: Python packages (`margana_gen`, `margana_score`, `margana_metrics`, etc.) and Lambda handlers.
+- `python/lambdas/`: Lambda handler entrypoints.
+- `python/ecs/`: Future ECS/container entrypoints for puzzle generation jobs.
+- `python/`: Shared Python packages (`margana_gen`, `margana_score`, `margana_metrics`, etc.).
 - `postmarkTemplates/`: Email templates used by backend services.
 - `resources/`: Sample events and test data for backend services.
 - `requirements.txt` / `pyproject.toml`: Python dependency management.
@@ -47,17 +49,25 @@ This document outlines the proposed strategy for refactoring the current Margana
 
 ## Managing Shared Components and Links
 
-### 1. The Word List (`margana-word-list.txt`)
-The word list is currently the most critical link between Python (runtime validation/generation) and Vue (build-time XOR filter generation).
+### 1. Shared Build-Time Assets
+The backend currently depends on shared build-time assets for puzzle generation, validation, and scoring consistency:
+
+- `margana-word-list.txt`
+- `horizontal-exclude-words.txt`
+- `letter-scores-v3.json`
+
+The word list is the most critical link between Python (runtime validation/generation) and Vue (build-time XOR filter generation). The horizontal exclude list and letter score configuration should be managed using the same pattern so puzzle-generation jobs and backend scoring do not rely on Git-committed canonical copies.
 
 **Strategy:**
 - **Source of Truth:** A dedicated S3 bucket (e.g., `margana-static-assets`) managed by `margana-infra`.
 - **Backend Consumption (Build-Time):** During the `margana-backend` CI/CD build process (specifically when creating Python Lambda Layers), the word list is downloaded from S3 and placed into `python/margana_score/data/`. This ensures the word list is bundled with the code, providing **zero runtime latency** and avoiding extra S3 calls in the Lambdas.
+- **Backend Consumption for Puzzle Jobs (Build-Time):** During backend packaging for ECS/job workloads, `horizontal-exclude-words.txt` should also be downloaded from S3 and placed in the path expected by the puzzle-generation job packaging process.
+- **Backend Consumption for Shared Scoring Configuration (Build-Time):** During backend packaging, `letter-scores-v3.json` should be downloaded from S3 and placed in the path expected by both ECS/job packaging and any backend scoring components that depend on canonical letter scores.
 - **Frontend Consumption (Build-Time):** During the `margana-web` CI/CD build process, the word list is downloaded from S3 before running `npm run build:wordfilter` to generate the XOR filters.
 - **Benefits:**
   - Single source of truth (S3).
   - No runtime dependency on S3 for word validation.
-  - Consistent validation across frontend and backend by using the exact same source file at build time.
+  - Consistent validation, puzzle-generation behavior, and scoring configuration across repositories by using the exact same source files at build time.
 
 ### 2. Infrastructure & Backend Decoupling
 Currently, Terraform builds Lambda packages by referencing local Python paths.
@@ -105,9 +115,100 @@ To ensure a smooth transition without breaking the existing application, the mig
 **Goal:** Decouple the Python code from the infrastructure deployment.
 1.  **Initialize `margana-backend` repo:** Migrate the `python/`, `resources/`, and `postmarkTemplates/` directories.
 2.  **Setup Backend CI/CD:**
-    -   Fetch `margana-word-list.txt` from the Static Assets bucket at build time.
-    -   Run Python tests.
-    -   Package Lambdas and upload to the Build Artifacts bucket.
+    -   Use **GitHub Actions** as the CI/CD runner for `margana-backend`.
+    -   Use **AWS OIDC** federation from GitHub Actions to AWS instead of long-lived AWS access keys.
+    -   Split this work into the following implementation steps:
+
+    **Phase 2.2.1: Define deployment inventory**
+    -   Identify which files in `python/lambdas/` are actual Lambda entrypoints.
+    -   Separate deployable Lambdas from local-only scripts, utilities, and one-off admin tools.
+    -   Keep future puzzle-generation ECS jobs under `python/ecs/` so they are excluded from Lambda packaging.
+    -   Decide which shared Python packages must be bundled with every Lambda (`margana_score`, `margana_gen`, `margana_metrics`, `margana_costing`, etc.).
+    -   Document the expected artifact naming convention for each Lambda package.
+    -   Status (2026-03-12): complete in `margana-backend`; see `docs/deployment-inventory.md`.
+
+    **Phase 2.2.2: Configure GitHub Actions authentication to AWS**
+    -   Add a GitHub Actions workflow for backend build and packaging.
+    -   Configure the workflow with `permissions` required for OIDC, including `id-token: write`.
+    -   Create an AWS IAM OIDC identity provider for `https://token.actions.githubusercontent.com` if not already present.
+    -   Create a dedicated IAM role for this repository to assume from GitHub Actions.
+    -   Restrict the IAM role trust policy to this repository and the intended branch/environment using the GitHub `sub` claim.
+    -   Grant the role the minimum required permissions:
+        -   read access to the Static Assets bucket,
+        -   write access to the Build Artifacts bucket,
+        -   any additional read-only access needed for build metadata.
+    -   Avoid storing long-lived AWS credentials in GitHub secrets.
+    -   Next repo-side deliverables:
+        -   add `.github/workflows/backend-ci.yml`,
+        -   configure workflow `permissions` with `id-token: write`,
+        -   assume AWS credentials via GitHub OIDC instead of static secrets,
+        -   document required role ARN, bucket names, and environment/repository variables.
+
+    **Phase 2.2.3: Add build-time word list retrieval**
+    -   Download the canonical `margana-word-list.txt` from the Static Assets bucket during the workflow.
+    -   Download `horizontal-exclude-words.txt` from the same Static Assets bucket during the workflow for puzzle-generation job packaging.
+    -   Download `letter-scores-v3.json` from the same Static Assets bucket during the workflow.
+    -   Place it into the path expected by the packaging/build logic, specifically `python/margana_score/data/margana-word-list.txt`.
+    -   Place `horizontal-exclude-words.txt` into the path expected by the ECS/job packaging logic.
+    -   Place `letter-scores-v3.json` into the path expected by shared scoring logic and ECS/job packaging.
+    -   Keep all canonical build-fetched assets out of Git where they are intended to be supplied by CI/CD.
+    -   Ensure the workflow fails clearly if any required asset cannot be retrieved.
+    -   Keep test-only fixtures separate from the runtime bundled assets.
+
+    **Phase 2.2.4: Add repeatable Python environment setup**
+    -   Standardize the CI Python version (currently Python 3.12 based on `pyproject.toml`).
+    -   Install the package and dev/test dependencies in a repeatable way.
+    -   Prefer `pyproject.toml` as the source of truth for development/test dependencies.
+    -   Ensure the workflow can run from a clean checkout with no local-only assumptions.
+
+    **Phase 2.2.5: Run backend validation in CI**
+    -   Run the Python test suite in GitHub Actions.
+    -   Ensure tests do not rely on untracked local files or manually prepared environments.
+    -   Fail the workflow if tests fail.
+    -   Optionally add formatting/linting later, but the minimum requirement for Phase 2.2 is test execution.
+
+    **Phase 2.2.6: Package Lambda artifacts**
+    -   Build deployable `.zip` packages for each Lambda entrypoint.
+    -   Include:
+        -   the Lambda handler file from `python/lambdas/`,
+        -   shared internal packages under `python/`,
+        -   third-party runtime dependencies,
+        -   bundled runtime assets such as `python/margana_score/data/margana-word-list.txt` where required.
+    -   Exclude `python/ecs/` jobs from Lambda packaging.
+    -   Decide whether packaging is done:
+        -   as one artifact per Lambda, or
+        -   as a shared layer plus slim handler zips.
+    -   Keep the packaging output deterministic and suitable for reuse by Terraform.
+
+    **Phase 2.2.7: Publish artifacts to S3**
+    -   Upload generated Lambda `.zip` files to the Build Artifacts bucket.
+    -   Use a predictable S3 key structure, for example by repository, branch/environment, and commit SHA.
+    -   Capture artifact names/paths as workflow outputs so they can be consumed by later deployment steps.
+    -   Ensure uploaded artifacts are immutable or versioned enough to support traceable deployments.
+
+    **Phase 2.2.8: Define workflow triggers and release behavior**
+    -   Run validation on pull requests.
+    -   Run build/package on pushes to the main deployment branch.
+    -   Decide whether artifact upload happens:
+        -   on every main branch push, or
+        -   only on tagged releases / manual workflow dispatch.
+    -   Keep deployment to infrastructure changes out of this phase; this phase only produces validated artifacts.
+
+    **Phase 2.2.9: Document required CI/CD configuration**
+    -   Document the required GitHub repository settings, AWS role ARN, bucket names, and environment variables.
+    -   Document which values are expected to come from GitHub repository variables, GitHub environments, or workflow inputs.
+    -   Record the intended artifact naming/path convention so `margana-infra` can consume it in Phase 2.3.
+
+    **Phase 2.2 exit criteria**
+    -   A clean GitHub Actions run can:
+        -   authenticate to AWS via OIDC,
+        -   download the word list,
+        -   install dependencies,
+        -   run tests,
+        -   package the backend Lambdas,
+        -   upload the artifacts to the Build Artifacts bucket.
+    -   No long-lived AWS access keys are required in GitHub.
+    -   The generated artifact locations are stable enough for infrastructure integration in Phase 2.3.
 3.  **Update `margana-infra`:** Modify `aws_lambda_function` resources to point to the Build Artifacts bucket instead of local files.
 4.  **Verification:** Deploy backend changes to `preprod` from the new repositories and verify functionality.
 

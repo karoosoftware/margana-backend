@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def _load_madness_generator_module():
-    mod_path = Path(__file__).resolve().parents[1] / "generate-column-puzzle-madness.py"
+    mod_path = Path(__file__).resolve().parents[1] / "ecs" / "generate-column-puzzle-madness.py"
     spec = importlib.util.spec_from_file_location(
         "generate_column_puzzle_madness_for_tests",
         str(mod_path),

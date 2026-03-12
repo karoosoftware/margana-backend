@@ -14,7 +14,7 @@ Example:
   python3 scripts/generate-column-puzzle.py --output resources/column-puzzle.json
 
   source python/.venv/bin/activate
-  python3 python/generate-column-puzzle.py --environment preprod --year 2026 --iso-week 6 --diag-direction random --madness-word both --max-path-tries 400 --max-target-tries 300 --max-diag-tries 200 --use-s3-path-layout
+  python3 python/ecs/generate-column-puzzle.py --environment preprod --year 2026 --iso-week 6 --diag-direction random --madness-word both --max-path-tries 400 --max-target-tries 300 --max-diag-tries 200 --use-s3-path-layout
 
 """
 from __future__ import annotations
@@ -50,8 +50,8 @@ build_puzzle_with_path = getattr(_gen_mad_mod, "build_puzzle_with_path", None)
 
 # ---------- PATHS ----------
 SCRIPT_PATH = Path(__file__).resolve()
-PROJECT_ROOT = SCRIPT_PATH.parents[1]  # scripts/ -> project root
-RESOURCES_DIR = (PROJECT_ROOT / "python").resolve()
+PYTHON_ROOT = SCRIPT_PATH.parents[1]
+RESOURCES_DIR = PYTHON_ROOT.resolve()
 WORD_LIST_DEFAULT = RESOURCES_DIR / "margana-word-list.txt"
 WORDLIST_HORIZONTAL_EXCLUDE = RESOURCES_DIR / "horizontal-exclude-words.txt"
 # ---------------------------
@@ -100,7 +100,7 @@ def parse_args() -> argparse.Namespace:
                    help="Environment that you are working on, or 'dev' to choose automatically (default).")
     p.add_argument(
         "--words-file", type=str, default=str(WORD_LIST_DEFAULT),
-        help="Path to the word list file (default: resources/margana-word-list.txt).",
+        help="Path to the word list file (default: python/margana-word-list.txt).",
     )
     p.add_argument(
         "--target", type=str, default=None,

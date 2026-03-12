@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def _load_generator_module():
-    mod_path = Path(__file__).resolve().parents[1] / "generate-column-puzzle.py"
+    mod_path = Path(__file__).resolve().parents[1] / "ecs" / "generate-column-puzzle.py"
     spec = importlib.util.spec_from_file_location("generate_column_puzzle_for_tests", str(mod_path))
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)

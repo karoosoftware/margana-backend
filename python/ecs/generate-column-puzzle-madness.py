@@ -35,8 +35,8 @@ from margana_gen.s3_utils import (
 from margana_score import remove_pre_loaded_words
 
 SCRIPT_PATH = Path(__file__).resolve()
-PROJECT_ROOT = SCRIPT_PATH.parents[1]
-RESOURCES_DIR = (PROJECT_ROOT / "python").resolve()
+PYTHON_ROOT = SCRIPT_PATH.parents[1]
+RESOURCES_DIR = PYTHON_ROOT.resolve()
 WORD_LIST_DEFAULT = RESOURCES_DIR / "margana-word-list.txt"
 WORDLIST_HORIZONTAL_EXCLUDE = RESOURCES_DIR / "horizontal-exclude-words.txt"
 USAGE_LOG_FILE = (RESOURCES_DIR / "margana-puzzle-usage-log2.json").resolve()
