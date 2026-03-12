@@ -87,6 +87,33 @@ jobs:
 
           printf '%s\n' "$LAYER_ARTIFACT_NAME" > "$RUNNER_TEMP/artifact-list.txt"
 
+      - name: Build thin handler artifact - submission
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_ROOT="$RUNNER_TEMP/lambda-artifacts"
+          HANDLER_BUILD_ROOT="$RUNNER_TEMP/handler-build"
+          SHA_SHORT="${GITHUB_SHA::7}"
+
+          LOGICAL_NAME="submission"
+          SOURCE_FILE="lambda_submission.py"
+          STAGE_DIR="$HANDLER_BUILD_ROOT/$LOGICAL_NAME"
+          ARTIFACT_NAME="${LOGICAL_NAME}__${SHA_SHORT}.zip"
+          ARTIFACT_PATH="$ARTIFACT_ROOT/$ARTIFACT_NAME"
+
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+
+          cp "lambdas/$SOURCE_FILE" "$STAGE_DIR/$SOURCE_FILE"
+          test -s "$STAGE_DIR/$SOURCE_FILE"
+
+          (
+            cd "$STAGE_DIR"
+            zip -qr "$ARTIFACT_PATH" .
+          )
+
+          printf '%s\n' "$ARTIFACT_NAME" >> "$RUNNER_TEMP/artifact-list.txt
+
       - name: Upload shared layer artifact to S3
         run: |
           set -euo pipefail
