@@ -87,7 +87,7 @@ jobs:
 
           printf '%s\n' "$LAYER_ARTIFACT_NAME" > "$RUNNER_TEMP/artifact-list.txt"
 
-      - name: Build thin handler artifact - submission
+      - name: Build thin handler artifacts
         run: |
           set -euo pipefail
 
@@ -95,24 +95,69 @@ jobs:
           HANDLER_BUILD_ROOT="$RUNNER_TEMP/handler-build"
           SHA_SHORT="${GITHUB_SHA::7}"
 
-          LOGICAL_NAME="submission"
-          SOURCE_FILE="lambda_submission.py"
-          STAGE_DIR="$HANDLER_BUILD_ROOT/$LOGICAL_NAME"
-          ARTIFACT_NAME="${LOGICAL_NAME}__${SHA_SHORT}.zip"
-          ARTIFACT_PATH="$ARTIFACT_ROOT/$ARTIFACT_NAME"
+          rm -rf "$HANDLER_BUILD_ROOT"
+          mkdir -p "$HANDLER_BUILD_ROOT"
 
-          rm -rf "$STAGE_DIR"
-          mkdir -p "$STAGE_DIR"
-
-          cp "lambdas/$SOURCE_FILE" "$STAGE_DIR/$SOURCE_FILE"
-          test -s "$STAGE_DIR/$SOURCE_FILE"
-
-          (
-            cd "$STAGE_DIR"
-            zip -qr "$ARTIFACT_PATH" .
+          handler_names=(
+            "ses-sns-events-notification"
+            "process-margana-results"
+            "weekly-seeder"
+            "athena-events-parquet-runner"
+            "margana-metric"
+            "profile-service"
+            "leaderboard-service"
+            "leaderboard-snapshot"
+            "dashboard-summary"
+            "send-friend-invite"
+            "pre-auth-approval"
+            "post-confirmation-action"
+            "terms-audit"
+            "user-settings"
+            "submission"
+            "cognito-delete-user-audit"
+            "authorizer"
           )
 
-          printf '%s\n' "$ARTIFACT_NAME" >> "$RUNNER_TEMP/artifact-list.txt"
+          handler_sources=(
+            "ses_sns_events_notification.py"
+            "lambda-process-margana-results.py"
+            "process_weekly_seeder.py"
+            "lambda_athena_events_parquet_runner.py"
+            "lambda_margana_metric.py"
+            "lambda_profile_service.py"
+            "lambda_leaderboard_service.py"
+            "lambda_leaderboard_snapshot.py"
+            "lambda_dashboard_summary.py"
+            "lambda_send_friend_invite.py"
+            "lambda_pre_auth_approval.py"
+            "lambda_post_confirmation_action.py"
+            "lambda_terms_audit.py"
+            "lambda_user_settings.py"
+            "lambda_submission.py"
+            "lambda_cognito_delete_user_audit.py"
+            "lambda_authorizer.py"
+          )
+
+          for idx in "${!handler_names[@]}"; do
+            logical_name="${handler_names[$idx]}"
+            source_file="${handler_sources[$idx]}"
+            stage_dir="$HANDLER_BUILD_ROOT/$logical_name"
+            artifact_name="${logical_name}__${SHA_SHORT}.zip"
+            artifact_path="$ARTIFACT_ROOT/$artifact_name"
+
+            rm -rf "$stage_dir"
+            mkdir -p "$stage_dir"
+
+            cp "lambdas/$source_file" "$stage_dir/$source_file"
+            test -s "$stage_dir/$source_file"
+
+            (
+              cd "$stage_dir"
+              zip -qr "$artifact_path" .
+            )
+
+            printf '%s\n' "$artifact_name" >> "$RUNNER_TEMP/artifact-list.txt"
+          done
 
       - name: Upload shared layer artifact to S3
         run: |
