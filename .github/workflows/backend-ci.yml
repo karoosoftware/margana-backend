@@ -112,7 +112,7 @@ jobs:
             zip -qr "$ARTIFACT_PATH" .
           )
 
-          printf '%s\n' "$ARTIFACT_NAME" >> "$RUNNER_TEMP/artifact-list.txt
+          printf '%s\n' "$ARTIFACT_NAME" >> "$RUNNER_TEMP/artifact-list.txt"
 
       - name: Upload shared layer artifact to S3
         run: |
