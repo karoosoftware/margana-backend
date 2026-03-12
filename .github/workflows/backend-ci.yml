@@ -30,7 +30,7 @@ jobs:
           echo "event_name=${{ github.event_name }}"
           echo "ref=${{ github.ref }}"
           echo "ref_name=${{ github.ref_name }}"
-          echo "actor=${{ github.actor }}
+          echo "actor=${{ github.actor }}"
 
       - name: Configure AWS credentials from GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
