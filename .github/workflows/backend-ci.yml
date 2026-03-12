@@ -44,4 +44,4 @@ jobs:
       - name: Verify bucket access
         run: |
           aws s3api head-bucket --bucket "$STATIC_ASSETS_BUCKET"
-          aws s3api head-bucket --bucket "$BUILD_ARTIFACTS_BUCKET
+          aws s3api head-bucket --bucket "$BUILD_ARTIFACTS_BUCKET"
