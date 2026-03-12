@@ -1,0 +1,22 @@
+{
+  "resource": "/live-score",
+  "path": "/live-score",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost:5173"
+  },
+  "multiValueHeaders": {},
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "httpMethod": "POST",
+    "requestTimeEpoch": 1733756522000,
+    "path": "/live-score",
+    "stage": "dev"
+  },
+  "body": "{\n  \"meta\": {\n    \"rows\": 5,\n    \"cols\": 5,\n    \"madnessAvailable\": false\n  },\n  \"cells\": [\n    { \"r\": 0, \"c\": 0, \"letter\": \"s\" },\n    { \"r\": 0, \"c\": 1, \"letter\": \"t\" },\n    { \"r\": 0, \"c\": 2, \"letter\": \"a\" },\n    { \"r\": 0, \"c\": 3, \"letter\": \"r\" },\n    { \"r\": 0, \"c\": 4, \"letter\": \"e\" },\n    { \"r\": 1, \"c\": 0, \"letter\": \"p\" },\n    { \"r\": 1, \"c\": 1, \"letter\": \"r\" },\n    { \"r\": 1, \"c\": 2, \"letter\": \"o\" },\n    { \"r\": 1, \"c\": 3, \"letter\": \"v\" },\n    { \"r\": 1, \"c\": 4, \"letter\": \"e\" },\n    { \"r\": 2, \"c\": 0, \"letter\": \"l\" },\n    { \"r\": 2, \"c\": 1, \"letter\": \"i\" },\n    { \"r\": 2, \"c\": 2, \"letter\": \"g\" },\n    { \"r\": 2, \"c\": 3, \"letter\": \"h\" },\n    { \"r\": 2, \"c\": 4, \"letter\": \"t\" },\n    { \"r\": 3, \"c\": 0, \"letter\": \"c\" },\n    { \"r\": 3, \"c\": 1, \"letter\": \"a\" },\n    { \"r\": 3, \"c\": 2, \"letter\": \"n\" },\n    { \"r\": 3, \"c\": 3, \"letter\": \"d\" },\n    { \"r\": 3, \"c\": 4, \"letter\": \"y\" },\n    { \"r\": 4, \"c\": 0, \"letter\": \"m\" },\n    { \"r\": 4, \"c\": 1, \"letter\": \"o\" },\n    { \"r\": 4, \"c\": 2, \"letter\": \"u\" },\n    { \"r\": 4, \"c\": 3, \"letter\": \"r\" },\n    { \"r\": 4, \"c\": 4, \"letter\": \"n\" }\n  ]\n}",
+  "isBase64Encoded": false
+}

@@ -1,0 +1,1 @@
+# Margana puzzle generator package

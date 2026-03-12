@@ -1,0 +1,100 @@
+{
+  "anagram_result": {
+    "accepted": true,
+    "submitted": "gut"
+  },
+  "meta": {
+    "date": "2025-12-10",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 3,
+    "diagonalDirection": "anti",
+    "verticalTargetWord": "halve",
+    "diagonalTargetWord": "talus",
+    "madnessAvailable": false,
+    "longestAnagramCount": 10,
+    "userAnagram": "GUT",
+    "skippedRows": []
+  },
+  "valid_words_metadata": [
+    {
+      "word": "wight",
+      "type": "row",
+      "index": 0,
+      "direction": "lr",
+      "start_index": { "r": 0, "c": 0 },
+      "end_index": { "r": 0, "c": 4 },
+      "palindrome": false,
+      "semordnilap": false,
+      "letter_value": { "w": 8, "h": 6, "i": 2, "t": 3, "g": 5 },
+      "letters": ["w", "i", "g", "h", "t"],
+      "letter_scores": [8, 2, 5, 6, 3],
+      "letter_sum": 24,
+      "base_score": 24,
+      "bonus": 0,
+      "score": 24
+    },
+    {
+      "word": "jolly",
+      "type": "row",
+      "index": 2,
+      "direction": "lr",
+      "start_index": { "r": 2, "c": 0 },
+      "end_index": { "r": 2, "c": 4 },
+      "palindrome": false,
+      "semordnilap": false,
+      "letter_value": { "j": 12, "l": 4, "o": 4, "y": 7 },
+      "letters": ["j", "o", "l", "l", "y"],
+      "letter_scores": [12, 4, 4, 4, 7],
+      "letter_sum": 31,
+      "base_score": 31,
+      "bonus": 0,
+      "score": 31
+    },
+    {
+      "word": "sexes",
+      "type": "row",
+      "index": 4,
+      "direction": "lr",
+      "start_index": { "r": 4, "c": 0 },
+      "end_index": { "r": 4, "c": 4 },
+      "palindrome": true,
+      "semordnilap": false,
+      "letter_value": { "s": 2, "e": 2, "x": 12 },
+      "letters": ["s", "e", "x", "e", "s"],
+      "letter_scores": [2, 2, 12, 2, 2],
+      "letter_sum": 20,
+      "base_score": 40,
+      "bonus": 0,
+      "score": 40
+    },
+    {
+      "word": "gut",
+      "type": "anagram",
+      "index": 0,
+      "direction": "builder",
+      "start_index": null,
+      "end_index": null,
+      "palindrome": false,
+      "semordnilap": false,
+      "letter_value": { "g": 5, "u": 5, "t": 3 },
+      "letters": ["g", "u", "t"],
+      "letter_scores": [5, 5, 3],
+      "letter_sum": 13,
+      "base_score": 13,
+      "bonus": 0,
+      "score": 13
+    }
+  ],
+  "total_score": 108,
+  "skippedRows": [],
+  "saved": { "bucket": null, "key": null, "uploaded": false },
+  "row_summaries": [
+    { "row": 0, "skipped": false, "word": "wight", "valid": true, "score": 24 },
+    { "row": 1, "skipped": false, "word": "     ", "valid": false, "score": 0 },
+    { "row": 2, "skipped": false, "word": "jolly", "valid": true, "score": 31 },
+    { "row": 3, "skipped": false, "word": "     ", "valid": false, "score": 0 },
+    { "row": 4, "skipped": false, "word": "sexes", "valid": true, "score": 20 }
+  ]
+}

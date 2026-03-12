@@ -1,0 +1,66 @@
+{
+  "anagram_result": {
+    "accepted": true,
+    "submitted": "gut"
+  },
+  "meta": {
+    "date": "2025-12-10",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 3,
+    "diagonalDirection": "anti",
+    "verticalTargetWord": "halve",
+    "diagonalTargetWord": "talus",
+    "madnessAvailable": false,
+    "longestAnagramCount": 10,
+    "userAnagram": "GUT",
+    "skippedRows": []
+  },
+  "valid_words_metadata": [
+    {
+      "word": "vulva",
+      "type": "row",
+      "index": 3,
+      "direction": "lr",
+      "start_index": { "r": 3, "c": 0 },
+      "end_index": { "r": 3, "c": 4 },
+      "palindrome": false,
+      "semordnilap": false,
+      "letter_value": { "v": 8, "u": 5, "l": 4, "a": 3 },
+      "letters": ["v", "u", "l", "v", "a"],
+      "letter_scores": [8, 5, 4, 8, 3],
+      "letter_sum": 28,
+      "base_score": 28,
+      "bonus": 0,
+      "score": 28
+    },
+    {
+      "word": "gut",
+      "type": "anagram",
+      "index": 0,
+      "direction": "builder",
+      "start_index": null,
+      "end_index": null,
+      "palindrome": false,
+      "semordnilap": false,
+      "letter_value": { "g": 5, "u": 5, "t": 3 },
+      "letters": ["g", "u", "t"],
+      "letter_scores": [5, 5, 3],
+      "letter_sum": 13,
+      "base_score": 13,
+      "bonus": 0,
+      "score": 13
+    }
+  ],
+  "total_score": 41,
+  "skippedRows": [],
+  "saved": { "bucket": null, "key": null, "uploaded": false },
+  "row_summaries": [
+    { "row": 0, "skipped": false, "word": "     ", "valid": false, "score": 0 },
+    { "row": 1, "skipped": false, "word": "     ", "valid": false, "score": 0 },
+    { "row": 2, "skipped": false, "word": "     ", "valid": false, "score": 0 },
+    { "row": 3, "skipped": false, "word": "vulva", "valid": true, "score": 28 },
+    { "row": 4, "skipped": false, "word": "     ", "valid": false, "score": 0 }
+  ]
+}

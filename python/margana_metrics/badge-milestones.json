@@ -1,0 +1,104 @@
+{
+  "anagram_solved": {
+    "title": "Anagrams solved",
+    "prefix": "BADGE",
+    "color": "bg-[linear-gradient(45deg,rgb(35,141,132)_10%,rgb(250,204,21)_90%)]",
+    "milestone_strategy": {
+      "type": "tiered",
+      "tiers": [
+        {
+          "upto": 7,
+          "interval": 1
+        },
+        {
+          "upto": 42,
+          "interval": 7
+        },
+        {
+          "interval": 21
+        }
+      ]
+    }
+  },
+  "days_outplayed_margana": {
+    "title": "Days outplayed Margana",
+    "prefix": "BADGE",
+    "color": "bg-gradient-to-tr from-[rgb(255,72,153)] to-[rgb(250,204,21)]",
+    "milestone_strategy": {
+      "type": "tiered",
+      "tiers": [
+        {
+          "upto": 7,
+          "interval": 1
+        },
+        {
+          "upto": 42,
+          "interval": 7
+        },
+        {
+          "interval": 21
+        }
+      ]
+    }
+  },
+  "weeks_outplayed_margana": {
+    "title": "Weeks outplayed Margana",
+    "prefix": "BADGE",
+    "color": "bg-gradient-to-tr from-[rgb(255,72,153)] to-[rgb(250,204,21)]",
+    "milestone_strategy": {
+      "type": "tiered",
+      "tiers": [
+        {
+          "upto": 3,
+          "interval": 1
+        },
+        {
+          "upto": 5,
+          "interval": 2
+        },
+        {
+          "interval": 5
+        }
+      ]
+    }
+  },
+  "madness_solved": {
+    "title": "Margana madness solved",
+    "prefix": "BADGE",
+    "color": "bg-gradient-to-tr from-indigo-500 via-purple-600 to-violet-700",
+    "milestone_strategy": {
+      "type": "tiered",
+      "tiers": [
+        {
+          "upto": 3,
+          "interval": 1
+        },
+        {
+          "upto": 5,
+          "interval": 2
+        },
+        {
+          "interval": 5
+        }
+      ]
+    }
+  },
+  "highest_score_ever": {
+    "title": "Highest score ever",
+    "prefix": "TEXT",
+    "color": "bg-gradient-to-tr from-amber-400 to-orange-500",
+    "description": "Your highest daily score achieved"
+  },
+  "current_ranking": {
+    "title": "Global ranking",
+    "prefix": "TEXT",
+    "color": "bg-gradient-to-tr from-cyan-400 to-blue-500",
+    "description": "Your final placement in the previous week's leaderboard"
+  },
+  "highest_weekly_score_ever": {
+    "title": "Highest weekly score",
+    "prefix": "TEXT",
+    "color": "bg-gradient-to-tr from-emerald-400 to-teal-600",
+    "description": "The highest total score you've achieved in a single week"
+  }
+}

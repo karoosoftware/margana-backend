@@ -1,0 +1,25 @@
+{
+  "body": {
+    "meta": {
+      "date": "2025-12-10",
+      "rows": 5,
+      "cols": 5,
+      "wordLength": 5,
+      "columnIndex": 3,
+      "diagonalDirection": "anti",
+      "verticalTargetWord": "halve",
+      "diagonalTargetWord": "talus",
+      "madnessAvailable": false,
+      "longestAnagramCount": 10,
+      "userAnagram": "GUT",
+      "skippedRows": []
+    },
+    "cells": [
+      { "r": 3, "c": 0, "letter": "V", "target": false, "targetType": null },
+      { "r": 3, "c": 1, "letter": "U", "target": true, "targetType": "diagonal" },
+      { "r": 3, "c": 2, "letter": "L", "target": false, "targetType": null },
+      { "r": 3, "c": 3, "letter": "V", "target": true, "targetType": "vertical" },
+      { "r": 3, "c": 4, "letter": "A", "target": false, "targetType": null }
+    ]
+  }
+}

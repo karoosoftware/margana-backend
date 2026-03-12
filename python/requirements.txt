@@ -1,0 +1,4 @@
+# Project dependencies for chippyChain
+# Only external library used is AWS SDK for Python
+boto3>=1.28,<2.0
+boto3-stubs

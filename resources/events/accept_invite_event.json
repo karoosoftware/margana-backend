@@ -1,0 +1,47 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /accept-game-group-invite-dev",
+  "rawPath": "/development/accept-game-group-invite-dev",
+  "rawQueryString": "",
+  "headers": {
+    "accept": "application/json, text/plain, */*",
+    "content-type": "application/json",
+    "host": "qh5zdx5uo1.execute-api.eu-west-2.amazonaws.com",
+    "user-agent": "aws-console-test",
+    "x-forwarded-for": "203.0.113.1",
+    "x-forwarded-port": "443",
+    "x-forwarded-proto": "https",
+    "authorization": "Bearer eyJhbGciOi...dummy-id-token..."
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "qh5zdx5uo1",
+    "domainName": "qh5zdx5uo1.execute-api.eu-west-2.amazonaws.com",
+    "domainPrefix": "qh5zdx5uo1",
+    "http": {
+      "method": "POST",
+      "path": "/development/accept-game-group-invite-dev",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "203.0.113.1",
+      "userAgent": "aws-console-test"
+    },
+    "requestId": "TEST-EVENT-REQUEST-ID",
+    "routeKey": "POST /accept-game-group-invite-dev",
+    "stage": "development",
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "sub": "99999999-8888-7777-6666-555555555555",
+          "cognito:username": "janedoe",
+          "email": "janedoe@example.com",
+          "iss": "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_ExamplePoolId"
+        },
+        "scopes": []
+      }
+    },
+    "time": "09/Sep/2025:17:55:00 +0000",
+    "timeEpoch": 1757450100000
+  },
+  "isBase64Encoded": false,
+  "body": "{\n  \"group_id\": \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\n  \"invite\": \"01234567-89ab-cdef-0123-456789abcdef\"\n}"
+}

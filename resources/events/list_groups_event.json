@@ -1,0 +1,45 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /list-game-groups-dev",
+  "rawPath": "/development/list-game-groups-dev",
+  "rawQueryString": "",
+  "headers": {
+    "accept": "application/json, text/plain, */*",
+    "host": "qh5zdx5uo1.execute-api.eu-west-2.amazonaws.com",
+    "user-agent": "aws-console-test",
+    "x-forwarded-for": "203.0.113.1",
+    "x-forwarded-port": "443",
+    "x-forwarded-proto": "https",
+    "authorization": "Bearer eyJhbGciOi...dummy-id-token..."
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "qh5zdx5uo1",
+    "domainName": "qh5zdx5uo1.execute-api.eu-west-2.amazonaws.com",
+    "domainPrefix": "qh5zdx5uo1",
+    "http": {
+      "method": "GET",
+      "path": "/development/list-game-groups-dev",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "203.0.113.1",
+      "userAgent": "aws-console-test"
+    },
+    "requestId": "TEST-EVENT-REQUEST-ID",
+    "routeKey": "GET /list-game-groups-dev",
+    "stage": "development",
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "sub": "11111111-2222-3333-4444-555555555555",
+          "cognito:username": "jdoe",
+          "email": "jdoe@example.com",
+          "iss": "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_ExamplePoolId"
+        },
+        "scopes": []
+      }
+    },
+    "time": "09/Sep/2025:07:45:00 +0000",
+    "timeEpoch": 1757413500000
+  },
+  "isBase64Encoded": false
+}

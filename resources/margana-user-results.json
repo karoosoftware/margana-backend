@@ -1,0 +1,151 @@
+{
+  "saved_at": "2025-09-10T10:57:00.840476+00:00",
+  "user": {
+    "sub": "a6c20264-90a1-70d7-6456-12345",
+    "username": "brad",
+    "email": "paulury@nothing.co.uk",
+    "issuer": "https://cognito-idp.eu-west-2.amazonaws.com/eu-wez1234",
+    "identity_provider": null
+  },
+  "meta": {
+    "date": "2025-09-04",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 4,
+    "diagonalDirection": "main",
+    "verticalTargetWord": "CHAPS",
+    "diagonalTargetWord": "SAILS",
+    "longestAnagram": null,
+    "userAnagram": "PACE"
+  },
+  "grid_rows": [
+    "stoic",
+    "batch",
+    "china",
+    "scalp",
+    "sexes"
+  ],
+  "valid_words": {
+    "rows": {
+      "lr": [
+        "stoic",
+        "batch",
+        "china",
+        "scalp",
+        "sexes"
+      ],
+      "rl": []
+    },
+    "columns": {
+      "tb": [],
+      "bt": []
+    },
+    "diagonals": {
+      "main": [],
+      "main_rev": [],
+      "anti": [],
+      "anti_rev": []
+    },
+    "anagram": []
+  },
+  "valid_words_metadata": [
+    {
+      "word": "stoic",
+      "type": "row",
+      "index": 0,
+      "direction": "lr",
+      "start_index": {
+        "r": 0,
+        "c": 0
+      },
+      "end_index": {
+        "r": 0,
+        "c": 4
+      },
+      "palindrome": false,
+      "semordnilap": false,
+      "score": 7
+    },
+    {
+      "word": "batch",
+      "type": "row",
+      "index": 1,
+      "direction": "lr",
+      "start_index": {
+        "r": 1,
+        "c": 0
+      },
+      "end_index": {
+        "r": 1,
+        "c": 4
+      },
+      "palindrome": false,
+      "semordnilap": false,
+      "score": 12
+    },
+    {
+      "word": "china",
+      "type": "row",
+      "index": 2,
+      "direction": "lr",
+      "start_index": {
+        "r": 2,
+        "c": 0
+      },
+      "end_index": {
+        "r": 2,
+        "c": 4
+      },
+      "palindrome": false,
+      "semordnilap": false,
+      "score": 10
+    },
+    {
+      "word": "scalp",
+      "type": "row",
+      "index": 3,
+      "direction": "lr",
+      "start_index": {
+        "r": 3,
+        "c": 0
+      },
+      "end_index": {
+        "r": 3,
+        "c": 4
+      },
+      "palindrome": false,
+      "semordnilap": false,
+      "score": 9
+    },
+    {
+      "word": "sexes",
+      "type": "row",
+      "index": 4,
+      "direction": "lr",
+      "start_index": {
+        "r": 4,
+        "c": 0
+      },
+      "end_index": {
+        "r": 4,
+        "c": 4
+      },
+      "palindrome": true,
+      "semordnilap": false,
+      "score": 24
+    },
+    {
+      "word": "pace",
+      "type": "anagram",
+      "index": 0,
+      "direction": "builder",
+      "start_index": null,
+      "end_index": null,
+      "palindrome": false,
+      "semordnilap": false,
+      "score": 8
+    }
+  ],
+  "total_score": 70
+}

@@ -1,0 +1,38 @@
+{
+  "Records": [
+    {
+      "eventVersion": "2.1",
+      "eventSource": "aws:s3",
+      "awsRegion": "eu-west-2",
+      "eventTime": "2025-09-03T14:47:00.000Z",
+      "eventName": "ObjectCreated:Put",
+      "userIdentity": {
+        "principalId": "AIDAEXAMPLE"
+      },
+      "requestParameters": {
+        "sourceIPAddress": "203.0.113.1"
+      },
+      "responseElements": {
+        "x-amz-request-id": "EXAMPLE123456789",
+        "x-amz-id-2": "EXAMPLEabcdefghijklmn/opqrstuvwxyz0123456789EXAMPLE="
+      },
+      "s3": {
+        "s3SchemaVersion": "1.0",
+        "configurationId": "lambda-trigger-margana-user-results",
+        "bucket": {
+          "name": "margana-game-results-dev",
+          "ownerIdentity": {
+            "principalId": "A3NL1KOZZKExample"
+          },
+          "arn": "arn:aws:s3:::margana-game-results-dev"
+        },
+        "object": {
+          "key": "a6c20264-90a1-70d7-6456-c8ce310d6294/20250903T094631Z.json",
+          "size": 4096,
+          "eTag": "0123456789abcdef0123456789abcdef",
+          "sequencer": "0066D6F5D6B9A1A1E2"
+        }
+      }
+    }
+  ]
+}

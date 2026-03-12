@@ -1,0 +1,19 @@
+{
+  "date": "2025-09-02",
+  "id": "92fe0eba8f",
+  "chain_id": "33fd1b2c2c",
+  "word_length": 5,
+  "vertical_target_word": "shout",
+  "column_index": 0,
+  "diagonal_direction": "main",
+  "diagonal_target_word": "sager",
+  "grid_rows": [
+    "s****",
+    "ha***",
+    "o*g**",
+    "u**e*",
+    "t***r"
+  ],
+  "longest_anagram_count": 10,
+  "longestAnagramShuffled": "ASEASTSICN"
+}

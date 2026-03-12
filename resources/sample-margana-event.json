@@ -1,0 +1,81 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /margana-commit-words",
+  "rawPath": "/margana-commit-words",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json",
+    "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMTExMTExMS0yMjIyLTMzMzMtNDQ0NC01NTU1NTU1NTU1NTUiLCJjb2duaXRvOnVzZXJuYW1lIjoidGVzdHVzZXIiLCJlbWFpbCI6InRlc3R1c2VyQGV4YW1wbGUuY29tIiwiaXNzIjoiaHR0cHM6Ly9jb2duaXRvLWlkcC5ldS13ZXN0LTIuYW1hem9uYXdzLmNvbS9ldS13ZXN0LTJfRXhhbXBsZSJ9.signature"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "abcdef1234",
+    "domainName": "abcdef1234.execute-api.eu-west-2.amazonaws.com",
+    "domainPrefix": "abcdef1234",
+    "http": {
+      "method": "POST",
+      "path": "/margana-commit-words",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "203.0.113.1",
+      "userAgent": "UnitTest/1.0"
+    },
+    "authorizer": {
+      "jwt": {
+        "claims": {
+          "sub": "11111111-2222-3333-4444-555555555555",
+          "cognito:username": "testuser",
+          "email": "testuser@example.com",
+          "iss": "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_Example"
+        }
+      }
+    },
+    "requestId": "IdExample="
+  },
+  "body": {
+    "meta": {
+      "date": "2025-10-26",
+      "rows": 5,
+      "cols": 5,
+      "wordLength": 5,
+      "columnIndex": 2,
+      "diagonalDirection": "main",
+      "verticalTargetWord": "snows",
+      "diagonalTargetWord": "cores",
+      "longestAnagram": "stare",
+      "longestAnagramCount": 10,
+      "userAnagram": "stare"
+    },
+    "cells": [
+      {"r":0,"c":0,"letter":"T","target":true,"targetType":"diagonal"},
+      {"r":0,"c":1,"letter":"A","target":false,"targetType":null},
+      {"r":0,"c":2,"letter":"R","target":true,"targetType":"vertical"},
+      {"r":0,"c":3,"letter":"E","target":false,"targetType":null},
+      {"r":0,"c":4,"letter":"S","target":false,"targetType":null},
+
+      {"r":1,"c":0,"letter":"A","target":false,"targetType":null},
+      {"r":1,"c":1,"letter":"A","target":true,"targetType":"diagonal"},
+      {"r":1,"c":2,"letter":"A","target":true,"targetType":"vertical"},
+      {"r":1,"c":3,"letter":"A","target":false,"targetType":null},
+      {"r":1,"c":4,"letter":"A","target":false,"targetType":null},
+
+      {"r":2,"c":0,"letter":"B","target":false,"targetType":null},
+      {"r":2,"c":1,"letter":"B","target":false,"targetType":null},
+      {"r":2,"c":2,"letter":"B","target":true,"targetType":"vertical"},
+      {"r":2,"c":3,"letter":"B","target":true,"targetType":"diagonal"},
+      {"r":2,"c":4,"letter":"B","target":false,"targetType":null},
+
+      {"r":3,"c":0,"letter":"C","target":false,"targetType":null},
+      {"r":3,"c":1,"letter":"C","target":false,"targetType":null},
+      {"r":3,"c":2,"letter":"C","target":true,"targetType":"vertical"},
+      {"r":3,"c":3,"letter":"C","target":false,"targetType":null},
+      {"r":3,"c":4,"letter":"C","target":true,"targetType":"diagonal"},
+
+      {"r":4,"c":0,"letter":"D","target":false,"targetType":null},
+      {"r":4,"c":1,"letter":"D","target":false,"targetType":null},
+      {"r":4,"c":2,"letter":"D","target":true,"targetType":"vertical"},
+      {"r":4,"c":3,"letter":"D","target":false,"targetType":null},
+      {"r":4,"c":4,"letter":"D","target":false,"targetType":null}
+    ]
+  },
+  "isBase64Encoded": false
+}

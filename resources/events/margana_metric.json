@@ -1,0 +1,20 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /week-scores-compare",
+  "rawPath": "/week-scores-compare",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/week-scores-compare",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "LocalTest"
+    }
+  },
+  "isBase64Encoded": false,
+  "body": "{\"weekId\":\"2025-W49\",\"user\":\"USER#96e2f2f4-8041-7075-c533-3502c0509c72\"}"
+}

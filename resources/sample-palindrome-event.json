@@ -1,0 +1,29 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /margana-results",
+  "rawPath": "/default/margana-results",
+  "rawQueryString": "",
+  "headers": {"content-type": "application/json"},
+  "requestContext": {"http": {"method": "POST", "path": "/default/margana-results"}},
+  "body": {
+    "meta": {
+      "date": "2025-08-31",
+      "rows": 5,
+      "cols": 5,
+      "wordLength": 5,
+      "columnIndex": 1,
+      "diagonalDirection": "anti",
+      "verticalTargetWord": "PANEL",
+      "diagonalTargetWord": "CAVES",
+      "userAnagram": "STAINS"
+    },
+    "cells": [
+      {"r":0,"c":0,"letter":"o"},{"r":0,"c":1,"letter":"p"},{"r":0,"c":2,"letter":"t"},{"r":0,"c":3,"letter":"i"},{"r":0,"c":4,"letter":"c"},
+      {"r":1,"c":0,"letter":"p"},{"r":1,"c":1,"letter":"a"},{"r":1,"c":2,"letter":"p"},{"r":1,"c":3,"letter":"a"},{"r":1,"c":4,"letter":"l"},
+      {"r":2,"c":0,"letter":"e"},{"r":2,"c":1,"letter":"n"},{"r":2,"c":2,"letter":"v"},{"r":2,"c":3,"letter":"o"},{"r":2,"c":4,"letter":"y"},
+      {"r":3,"c":0,"letter":"s"},{"r":3,"c":1,"letter":"e"},{"r":3,"c":2,"letter":"x"},{"r":3,"c":3,"letter":"e"},{"r":3,"c":4,"letter":"s"},
+      {"r":4,"c":0,"letter":"s"},{"r":4,"c":1,"letter":"l"},{"r":4,"c":2,"letter":"a"},{"r":4,"c":3,"letter":"v"},{"r":4,"c":4,"letter":"e"}
+    ]
+  },
+  "isBase64Encoded": false
+}

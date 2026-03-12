@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "date": "2025-09-01",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 0,
+    "diagonalDirection": "main",
+    "verticalTargetWord": null,
+    "diagonalTargetWord": null,
+    "longestAnagram": "amphibians",
+    "userAnagram": null
+  },
+  "grid_rows": [
+    "picky",
+    "baaed",
+    "denim",
+    "whets",
+    "jades"
+  ],
+  "cells": [
+    { "r": 0, "c": 0, "letter": "P", "target": false, "targetType": null },
+    { "r": 0, "c": 1, "letter": "I", "target": false, "targetType": null },
+    { "r": 0, "c": 2, "letter": "C", "target": false, "targetType": null },
+    { "r": 0, "c": 3, "letter": "K", "target": false, "targetType": null },
+    { "r": 0, "c": 4, "letter": "Y", "target": false, "targetType": null },
+
+    { "r": 1, "c": 0, "letter": "B", "target": false, "targetType": null },
+    { "r": 1, "c": 1, "letter": "A", "target": false, "targetType": null },
+    { "r": 1, "c": 2, "letter": "A", "target": false, "targetType": null },
+    { "r": 1, "c": 3, "letter": "E", "target": false, "targetType": null },
+    { "r": 1, "c": 4, "letter": "D", "target": false, "targetType": null },
+
+    { "r": 2, "c": 0, "letter": "D", "target": false, "targetType": null },
+    { "r": 2, "c": 1, "letter": "E", "target": false, "targetType": null },
+    { "r": 2, "c": 2, "letter": "N", "target": false, "targetType": null },
+    { "r": 2, "c": 3, "letter": "I", "target": false, "targetType": null },
+    { "r": 2, "c": 4, "letter": "M", "target": false, "targetType": null },
+
+    { "r": 3, "c": 0, "letter": "W", "target": false, "targetType": null },
+    { "r": 3, "c": 1, "letter": "H", "target": false, "targetType": null },
+    { "r": 3, "c": 2, "letter": "E", "target": false, "targetType": null },
+    { "r": 3, "c": 3, "letter": "T", "target": false, "targetType": null },
+    { "r": 3, "c": 4, "letter": "S", "target": false, "targetType": null },
+
+    { "r": 4, "c": 0, "letter": "J", "target": false, "targetType": null },
+    { "r": 4, "c": 1, "letter": "A", "target": false, "targetType": null },
+    { "r": 4, "c": 2, "letter": "D", "target": false, "targetType": null },
+    { "r": 4, "c": 3, "letter": "E", "target": false, "targetType": null },
+    { "r": 4, "c": 4, "letter": "S", "target": false, "targetType": null }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "saved_at": "2025-09-02T14:58:51.120769Z",
+  "user": {
+    "sub": "system",
+    "username": "generator",
+    "email": null,
+    "issuer": "generator",
+    "identity_provider": null
+  },
+  "meta": {
+    "date": "2025-09-02",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 0,
+    "diagonalDirection": "main",
+    "verticalTargetWord": "SHOUT",
+    "diagonalTargetWord": "SAGER",
+    "longestAnagram": "ATMOSPHERE",
+    "userAnagram": null
+  },
+  "grid_rows": [
+    "sexes",
+    "hazed",
+    "ought",
+    "upped",
+    "timer"
+  ],
+  "valid_words": {
+    "rows": {
+      "lr": [
+        "sexes",
+        "hazed",
+        "ought",
+        "upped",
+        "timer"
+      ],
+      "rl": [
+        "sexes",
+        "remit"
+      ]
+    },
+    "columns": {
+      "tb": [
+        "shout"
+      ],
+      "bt": []
+    },
+    "diagonals": {
+      "main": [
+        "sager"
+      ],
+      "main_rev": [],
+      "anti": [],
+      "anti_rev": [
+        "met"
+      ]
+    }
+  },
+  "valid_words_metadata": [
+    {
+      "word": "sexes",
+      "type": "row",
+      "index": 0,
+      "direction": "lr",
+      "start_index": {
+        "r": 0,
+        "c": 0
+      },
+      "end_index": {
+        "r": 0,
+        "c": 4
+      },
+      "score": 14
+    },
+    {
+      "word": "hazed",
+      "type": "row",
+      "index": 1,
+      "direction": "lr",
+      "start_index": {
+        "r": 1,
+        "c": 0
+      },
+      "end_index": {
+        "r": 1,
+        "c": 4
+      },
+      "score": 18
+    },
+    {
+      "word": "ought",
+      "type": "row",
+      "index": 2,
+      "direction": "lr",
+      "start_index": {
+        "r": 2,
+        "c": 0
+      },
+      "end_index": {
+        "r": 2,
+        "c": 4
+      },
+      "score": 9
+    },
+    {
+      "word": "upped",
+      "type": "row",
+      "index": 3,
+      "direction": "lr",
+      "start_index": {
+        "r": 3,
+        "c": 0
+      },
+      "end_index": {
+        "r": 3,
+        "c": 4
+      },
+      "score": 10
+    },
+    {
+      "word": "timer",
+      "type": "row",
+      "index": 4,
+      "direction": "lr",
+      "start_index": {
+        "r": 4,
+        "c": 0
+      },
+      "end_index": {
+        "r": 4,
+        "c": 4
+      },
+      "score": 7
+    },
+    {
+      "word": "sexes",
+      "type": "row",
+      "index": 0,
+      "direction": "rl",
+      "start_index": {
+        "r": 0,
+        "c": 4
+      },
+      "end_index": {
+        "r": 0,
+        "c": 0
+      },
+      "score": 14
+    },
+    {
+      "word": "remit",
+      "type": "row",
+      "index": 4,
+      "direction": "rl",
+      "start_index": {
+        "r": 4,
+        "c": 4
+      },
+      "end_index": {
+        "r": 4,
+        "c": 0
+      },
+      "score": 7
+    },
+    {
+      "word": "shout",
+      "type": "column",
+      "index": 0,
+      "direction": "tb",
+      "start_index": {
+        "r": 0,
+        "c": 0
+      },
+      "end_index": {
+        "r": 4,
+        "c": 0
+      },
+      "score": 9
+    },
+    {
+      "word": "sager",
+      "type": "diagonal",
+      "index": 0,
+      "direction": "main",
+      "start_index": {
+        "r": 0,
+        "c": 0
+      },
+      "end_index": {
+        "r": 4,
+        "c": 4
+      },
+      "score": 7
+    },
+    {
+      "word": "met",
+      "type": "diagonal",
+      "index": 0,
+      "direction": "anti_rev",
+      "start_index": {
+        "r": 4,
+        "c": 2
+      },
+      "end_index": {
+        "r": 2,
+        "c": 4
+      },
+      "score": 5
+    }
+  ],
+  "total_score": 100
+}
