@@ -3,7 +3,7 @@ name: Backend CI
 on:
   push:
     branches:
-      - main
+      - develop
   workflow_dispatch:
 
 permissions:

@@ -170,7 +170,7 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Download the canonical `margana-word-list.txt` from the Static Assets bucket during the workflow.
     -   Download `horizontal-exclude-words.txt` from the same Static Assets bucket during the workflow for puzzle-generation job packaging.
     -   Download `letter-scores-v3.json` from the same Static Assets bucket during the workflow.
-    -   Place it into the path expected by the packaging/build logic, specifically `python/margana_score/data/margana-word-list.txt`.
+    -   Place it into the path expected by the packaging/build logic, currently `layer-root/python/margana_score/data/margana-word-list.txt`.
     -   Place `horizontal-exclude-words.txt` into the path expected by the ECS/job packaging logic.
     -   Place `letter-scores-v3.json` into the path expected by shared scoring logic and ECS/job packaging.
     -   Keep all canonical build-fetched assets out of Git where they are intended to be supplied by CI/CD.
@@ -178,7 +178,7 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Keep test-only fixtures separate from the runtime bundled assets.
     -   Status (2026-03-12): started in `preprod`; direct S3 retrieval of canonical assets from GitHub Actions has been validated.
     -   Implementation note (2026-03-12): this phase is being delivered in two passes.
-        -   Pass 1 is Lambda-focused and only fetches `margana-word-list.txt` into `python/margana_score/data/margana-word-list.txt` so Lambda packaging can proceed.
+        -   Pass 1 is Lambda-focused and only fetches `margana-word-list.txt` into `layer-root/python/margana_score/data/margana-word-list.txt` so Lambda packaging can proceed.
         -   Pass 2 will add `horizontal-exclude-words.txt` and `letter-scores-v3.json` when ECS/job packaging is implemented.
 
     **Phase 2.2.4: Add repeatable Python environment setup**
@@ -197,29 +197,34 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Build deployable Lambda artifacts using a shared-layer model.
     -   Produce:
         -   one shared Lambda Layer artifact for common Python runtime code and assets,
-        -   one thin handler `.zip` per Lambda entrypoint under `python/lambdas/`.
+        -   one thin handler `.zip` per Lambda entrypoint under `lambdas/`.
     -   The shared layer should include:
         -   shared internal packages required by deployed Lambdas such as `margana_score`, `margana_metrics`, and `margana_costing`,
-        -   third-party runtime dependencies,
-        -   bundled runtime assets such as `python/margana_score/data/margana-word-list.txt`,
-        -   other package-scoped runtime config such as `python/margana_metrics/badge-milestones.json`.
-    -   The thin handler zip should include only the specific Lambda handler file and any minimal bootstrap/wrapper needed for handler naming.
-    -   Exclude `python/ecs/` jobs from Lambda packaging.
+        -   bundled runtime assets such as `layer-root/python/margana_score/data/margana-word-list.txt`,
+        -   other package-scoped runtime config such as `layer-root/python/margana_metrics/badge-milestones.json`.
+    -   The thin handler zip should include only the specific Lambda handler file from `lambdas/`.
+    -   Exclude `ecs/` jobs from Lambda packaging.
     -   Avoid duplicating shared internal packages across every handler zip when they are already provided by the shared layer.
     -   Keep the packaging output deterministic and suitable for reuse by Terraform.
-    -   Status (2026-03-12): packaging approach chosen; use a shared Lambda Layer plus thin handler zips.
+    -   Status (2026-03-13): implemented in `preprod`; the workflow builds one shared layer artifact plus thin handler zips and uploads them to the Build Artifacts bucket.
     -   Current repo source of truth: see `docs/deployment-inventory.md` for shared layer contents and handler-to-layer expectations.
-    -   Current stopping point / handoff note (2026-03-12):
+    -   Implementation notes (2026-03-13):
         -   a first workflow draft that packaged full per-Lambda zips was explored,
-        -   artifact inspection showed each zip incorrectly contained all Lambda handlers because the project install pulled in the full `python/lambdas/` package,
-        -   that approach is not the intended design and should be replaced rather than refined.
+        -   artifact inspection showed each zip incorrectly contained all Lambda handlers because the project install pulled in the full old handler package,
+        -   that approach was replaced with a shared-layer build plus thin handler zips,
+        -   thin handler artifacts are now discovered dynamically from the `lambdas/` directory by the packaging script,
+        -   the shared layer now copies only internal shared packages and runtime assets from `layer-root/python/`; it does not vendor the AWS SDK stack.
 
     **Phase 2.2.7: Publish artifacts to S3**
     -   Upload generated Lambda handler `.zip` files and the shared layer `.zip` to the Build Artifacts bucket.
     -   Use a predictable S3 key structure, for example by repository, branch/environment, and commit SHA.
     -   Capture artifact names/paths as workflow outputs so they can be consumed by later deployment steps.
     -   Ensure uploaded artifacts are immutable or versioned enough to support traceable deployments.
-    -   Status (2026-03-12): not yet implemented with the shared-layer model.
+    -   Status (2026-03-13): implemented in `preprod`.
+    -   Current published artifact shape:
+        -   shared layer artifact: `shared-python-deps-layer__<git-sha>.zip`
+        -   thin handler artifacts: one `<logical-name>__<git-sha>.zip` per discovered handler file in `lambdas/`
+        -   S3 key layout: `backend/preprod/<git-sha>/<artifact-name>`
 
     **Phase 2.2.8: Define workflow triggers and release behavior**
     -   Run validation on pull requests.
@@ -233,6 +238,9 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Document the required GitHub repository settings, AWS role ARN, bucket names, and environment variables.
     -   Document which values are expected to come from GitHub repository variables, GitHub environments, or workflow inputs.
     -   Record the intended artifact naming/path convention so `margana-infra` can consume it in Phase 2.3.
+    -   Status (2026-03-13): partially implemented.
+        -   Backend CI now uses a repo-owned packaging script to build the shared layer and thin handler artifacts.
+        -   Handler artifact discovery is dynamic from `lambdas/`; Terraform remains the source of truth for which artifacts are actually deployed.
 
     **Phase 2.2 exit criteria**
     -   A clean GitHub Actions run can:
