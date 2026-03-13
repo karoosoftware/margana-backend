@@ -6,7 +6,6 @@ ARTIFACT_ROOT="${ARTIFACT_ROOT:-${RUNNER_TEMP:-/tmp}/lambda-artifacts}"
 LAYER_BUILD_ROOT="${LAYER_BUILD_ROOT:-${RUNNER_TEMP:-/tmp}/shared-layer}"
 HANDLER_BUILD_ROOT="${HANDLER_BUILD_ROOT:-${RUNNER_TEMP:-/tmp}/handler-build}"
 ARTIFACT_LIST_FILE="${ARTIFACT_LIST_FILE:-${RUNNER_TEMP:-/tmp}/artifact-list.txt}"
-RUNTIME_REQUIREMENTS_FILE="${RUNTIME_REQUIREMENTS_FILE:-requirements.txt}"
 SHA_SHORT="${SHA_SHORT:-${GITHUB_SHA:0:7}}"
 
 if [[ -z "${SHA_SHORT}" ]]; then
@@ -27,17 +26,29 @@ derive_logical_name() {
 build_shared_layer() {
   local artifact_name="shared-python-deps-layer__${SHA_SHORT}.zip"
   local artifact_path="${ARTIFACT_ROOT}/${artifact_name}"
+  local package_name=""
+  local package_source_dir=""
+  local package_target_dir=""
+  local shared_packages=(
+    "margana_costing"
+    "margana_metrics"
+    "margana_score"
+  )
 
   rm -rf "${LAYER_BUILD_ROOT}"
   mkdir -p "${ARTIFACT_ROOT}" "${LAYER_BUILD_ROOT}/python"
 
-  if [[ ! -f "${RUNTIME_REQUIREMENTS_FILE}" ]]; then
-    echo "Runtime requirements file not found: ${RUNTIME_REQUIREMENTS_FILE}" >&2
-    exit 1
-  fi
+  for package_name in "${shared_packages[@]}"; do
+    package_source_dir="layer-root/python/${package_name}"
+    package_target_dir="${LAYER_BUILD_ROOT}/python/${package_name}"
 
-  python -m pip install --no-deps . --target "${LAYER_BUILD_ROOT}/python"
-  python -m pip install -r "${RUNTIME_REQUIREMENTS_FILE}" --target "${LAYER_BUILD_ROOT}/python"
+    if [[ ! -d "${package_source_dir}" ]]; then
+      echo "Shared layer package not found: ${package_source_dir}" >&2
+      exit 1
+    fi
+
+    cp -R "${package_source_dir}" "${package_target_dir}"
+  done
 
   test -s "${LAYER_BUILD_ROOT}/python/margana_metrics/badge-milestones.json"
   test -s "${LAYER_BUILD_ROOT}/python/margana_score/data/margana-word-list.txt"
