@@ -61,103 +61,23 @@ jobs:
       - name: Run tests
         run: pytest
 
-      - name: Build shared layer artifact
+      - name: Build Lambda artifacts
         run: |
           set -euo pipefail
 
           ARTIFACT_ROOT="$RUNNER_TEMP/lambda-artifacts"
-          LAYER_ROOT="$RUNNER_TEMP/shared-layer"
-          SHA_SHORT="${GITHUB_SHA::7}"
-          LAYER_ARTIFACT_NAME="shared-python-deps-layer__${SHA_SHORT}.zip"
-          LAYER_ARTIFACT_PATH="$ARTIFACT_ROOT/$LAYER_ARTIFACT_NAME"
-
-          rm -rf "$ARTIFACT_ROOT" "$LAYER_ROOT"
-          mkdir -p "$ARTIFACT_ROOT" "$LAYER_ROOT/python"
-
-          python -m pip install --no-deps . --target "$LAYER_ROOT/python"
-          python -m pip install "boto3>=1.28,<2.0" --target "$LAYER_ROOT/python"
-
-          test -s "$LAYER_ROOT/python/margana_metrics/badge-milestones.json"
-          test -s "$LAYER_ROOT/python/margana_score/data/margana-word-list.txt"
-
-          (
-            cd "$LAYER_ROOT"
-            zip -qr "$LAYER_ARTIFACT_PATH" python
-          )
-
-          printf '%s\n' "$LAYER_ARTIFACT_NAME" > "$RUNNER_TEMP/artifact-list.txt"
-
-      - name: Build thin handler artifacts
-        run: |
-          set -euo pipefail
-
-          ARTIFACT_ROOT="$RUNNER_TEMP/lambda-artifacts"
+          LAYER_BUILD_ROOT="$RUNNER_TEMP/shared-layer"
           HANDLER_BUILD_ROOT="$RUNNER_TEMP/handler-build"
+          ARTIFACT_LIST_FILE="$RUNNER_TEMP/artifact-list.txt"
           SHA_SHORT="${GITHUB_SHA::7}"
 
-          rm -rf "$HANDLER_BUILD_ROOT"
-          mkdir -p "$HANDLER_BUILD_ROOT"
+          export ARTIFACT_ROOT
+          export LAYER_BUILD_ROOT
+          export HANDLER_BUILD_ROOT
+          export ARTIFACT_LIST_FILE
+          export SHA_SHORT
 
-          handler_names=(
-            "ses-sns-events-notification"
-            "process-margana-results"
-            "weekly-seeder"
-            "athena-events-parquet-runner"
-            "margana-metric"
-            "profile-service"
-            "leaderboard-service"
-            "leaderboard-snapshot"
-            "dashboard-summary"
-            "send-friend-invite"
-            "pre-auth-approval"
-            "post-confirmation-action"
-            "terms-audit"
-            "user-settings"
-            "submission"
-            "cognito-delete-user-audit"
-            "authorizer"
-          )
-
-          handler_sources=(
-            "ses_sns_events_notification.py"
-            "lambda-process-margana-results.py"
-            "process_weekly_seeder.py"
-            "lambda_athena_events_parquet_runner.py"
-            "lambda_margana_metric.py"
-            "lambda_profile_service.py"
-            "lambda_leaderboard_service.py"
-            "lambda_leaderboard_snapshot.py"
-            "lambda_dashboard_summary.py"
-            "lambda_send_friend_invite.py"
-            "lambda_pre_auth_approval.py"
-            "lambda_post_confirmation_action.py"
-            "lambda_terms_audit.py"
-            "lambda_user_settings.py"
-            "lambda_submission.py"
-            "lambda_cognito_delete_user_audit.py"
-            "lambda_authorizer.py"
-          )
-
-          for idx in "${!handler_names[@]}"; do
-            logical_name="${handler_names[$idx]}"
-            source_file="${handler_sources[$idx]}"
-            stage_dir="$HANDLER_BUILD_ROOT/$logical_name"
-            artifact_name="${logical_name}__${SHA_SHORT}.zip"
-            artifact_path="$ARTIFACT_ROOT/$artifact_name"
-
-            rm -rf "$stage_dir"
-            mkdir -p "$stage_dir"
-
-            cp "lambdas/$source_file" "$stage_dir/$source_file"
-            test -s "$stage_dir/$source_file"
-
-            (
-              cd "$stage_dir"
-              zip -qr "$artifact_path" .
-            )
-
-            printf '%s\n' "$artifact_name" >> "$RUNNER_TEMP/artifact-list.txt"
-          done
+          bash packaging/build_lambda_artifacts.sh
 
       - name: Upload shared layer artifact to S3
         run: |
