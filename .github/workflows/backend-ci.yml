@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - main
   workflow_dispatch:
 
 permissions:
@@ -13,9 +14,10 @@ permissions:
 jobs:
   backend-ci:
     runs-on: ubuntu-latest
-    environment: preprod
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'preprod' }}
 
     env:
+      DEPLOY_ENV: ${{ github.ref_name == 'main' && 'prod' || 'preprod' }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       STATIC_ASSETS_BUCKET: ${{ vars.STATIC_ASSETS_BUCKET }}
       BUILD_ARTIFACTS_BUCKET: ${{ vars.BUILD_ARTIFACTS_BUCKET }}
@@ -85,7 +87,7 @@ jobs:
 
           ARTIFACT_ROOT="$RUNNER_TEMP/lambda-artifacts"
           SHA_SHORT="${GITHUB_SHA::7}"
-          S3_PREFIX="${BUILD_ARTIFACTS_PREFIX}/preprod/${SHA_SHORT}"
+          S3_PREFIX="${BUILD_ARTIFACTS_PREFIX}/${DEPLOY_ENV}/${SHA_SHORT}"
 
           while IFS= read -r artifact_name; do
             aws s3 cp \
