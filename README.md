@@ -104,9 +104,65 @@ python3 -m pytest
 
 The pytest configuration is defined in [pyproject.toml](/Users/paulbradbury/IdeaProjects/margana-backend/pyproject.toml) and points at `python/tests`.
 
-## Running Puzzle Generation Locally
+## Running Puzzle Generation (ECS Container)
 
-The generator can be run as a module:
+The puzzle generator is also available as a containerized ECS task. This is the recommended way to run it in a production-like environment locally.
+
+### Prerequisites
+
+- [Docker](https://www.docker.com/) installed and running.
+
+### Building the Image
+
+Build the container from the project root:
+
+```bash
+docker build -t margana-puzzle-generator -f ecs/Dockerfile .
+```
+
+### Running Locally
+
+To run the container with the default command (generates puzzles for the next week):
+
+```bash
+docker run --rm margana-puzzle-generator
+```
+
+To run with custom arguments (e.g., target a specific week and force regeneration):
+
+```bash
+docker run --rm margana-puzzle-generator --target-week 2026-15 --force
+```
+
+To run the internal health check:
+
+```bash
+docker run --rm margana-puzzle-generator --health
+docker run --rm -it --entrypoint /bin/bash margana-puzzle-generator
+```
+
+### Environment Variables and AWS Access
+
+When running the container locally, it will need AWS credentials to interact with S3. You can pass your local AWS credentials via environment variables:
+
+```bash
+docker run --rm \
+  -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+  -e AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
+  -e AWS_REGION=us-east-1 \
+  margana-puzzle-generator
+```
+
+Alternatively, you can mount your AWS configuration directory:
+
+```bash
+docker run --rm -v ~/.aws:/root/.aws:ro margana-puzzle-generator
+```
+
+## Running Puzzle Generation (Local Python)
+
+The generator can also be run directly as a module if you have the dependencies installed locally:
 
 ```bash
 python3 -m margana_gen.cli --help

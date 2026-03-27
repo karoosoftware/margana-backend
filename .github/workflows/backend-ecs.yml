@@ -12,8 +12,21 @@ on:
       - ".github/workflows/backend-ecs.yml"
 
 jobs:
-  hello-world:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Print hello world
-        run: echo "hello world"
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ecs/Dockerfile
+          push: false  # Change to true once ECR login is set up
+          tags: margana-puzzle-generator:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
