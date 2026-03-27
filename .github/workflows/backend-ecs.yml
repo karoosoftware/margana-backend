@@ -12,13 +12,12 @@ on:
       - ".github/workflows/backend-ecs.yml"
 
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
     environment: preprod
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v4
@@ -38,3 +37,20 @@ jobs:
           tags: margana-puzzle-generator:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  ecr-login:
+    runs-on: ubuntu-latest
+    environment: preprod
+
+    steps:
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Print hello world
+        run: echo "hello world"
