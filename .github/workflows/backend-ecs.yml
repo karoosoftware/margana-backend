@@ -11,6 +11,10 @@ on:
       - "layer-root/python/**"
       - ".github/workflows/backend-ecs.yml"
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
