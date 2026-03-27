@@ -36,13 +36,8 @@ jobs:
           push: false  # Change to true once ECR login is set up
           tags: margana-puzzle-generator:latest
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=ma
 
-  ecr-login:
-    runs-on: ubuntu-latest
-    environment: preprod
-
-    steps:
       - name: Configure AWS credentials from GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v6
         with:
