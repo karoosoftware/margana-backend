@@ -1,0 +1,19 @@
+name: Backend ECS
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - "feature-*"
+    paths:
+      - "ecs/**"
+      - "layer-root/python/**"
+      - ".github/workflows/backend-ecs.yml"
+
+jobs:
+  hello-world:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print hello world
+        run: echo "hello world"

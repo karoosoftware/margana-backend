@@ -5,6 +5,9 @@ on:
     branches:
       - develop
       - main
+    paths-ignore:
+      - 'ecs/**'
+      - '.github/workflows/backend-ecs.yml'
   workflow_dispatch:
 
 permissions:
@@ -26,7 +29,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure AWS credentials from GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4

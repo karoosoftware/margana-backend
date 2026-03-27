@@ -253,6 +253,20 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   No long-lived AWS access keys are required in GitHub.
     -   The generated artifact locations are stable enough for infrastructure integration in Phase 2.3.
 3.  **Update `margana-infra`:** Modify `aws_lambda_function` resources to point to the Build Artifacts bucket instead of local files.
+    -   **Phase 2.3: Switch Terraform to backend-published artifacts**
+    -   Status (2026-03-13): implemented in `preprod`; `prod` intentionally deferred until the remaining monorepo refactoring is complete.
+    -   Completed in `preprod`:
+        -   `aws_lambda_function` resources now load handler code from the Build Artifacts bucket using `s3_bucket` / `s3_key`.
+        -   Terraform no longer packages Lambda handlers from local source in `margana-infra`.
+        -   the three local internal layer builds were replaced with one shared S3-backed Lambda layer resource using `shared-python-deps-layer__<git-sha>.zip`.
+        -   Lambda keys and `lambda_arns` output keys were normalized to the canonical backend artifact logical names.
+        -   dashboard query templates now resolve from `monitoring/logs_queries/`.
+    -   Outstanding for `prod` once the monorepo refactor is complete:
+        -   choose the backend artifact SHA to deploy and update `envs/prod/prod.auto.tfvars`,
+        -   run the `terraform state mv` sequence for the renamed `module.lambda[...]` keys in `envs/prod`,
+        -   run a `terraform plan` in `envs/prod` and verify all handler and shared-layer artifact keys exist in the Build Artifacts bucket,
+        -   apply the `prod` cutover to switch handlers and shared layer to S3-backed artifacts,
+        -   apply the follow-up cleanup to remove the obsolete local layer build resources from `prod` state.
 4.  **Verification:** Deploy backend changes to `preprod` from the new repositories and verify functionality.
 
 ### Phase 3: Frontend Migration
@@ -263,6 +277,74 @@ To ensure a smooth transition without breaking the existing application, the mig
     -   Run `npm run build:wordfilter`.
     -   Build and deploy to the frontend hosting (e.g., S3/CloudFront).
 3.  **Verification:** Ensure the new frontend correctly communicates with the backend APIs.
+
+    **Phase 3 current handoff status (2026-03-13)**
+    -   Backend split work for `preprod` is complete enough for the frontend split to proceed:
+        -   backend CI publishes thin handler zips plus a shared layer zip,
+        -   `margana-infra` `preprod` consumes those S3-published artifacts,
+        -   `prod` infrastructure cutover is intentionally deferred until the broader split is finished.
+    -   The next active workstream is therefore the frontend migration in `margana-web`.
+
+    **Concrete Phase 3 implementation plan**
+    -   **Phase 3.1: Define the frontend build contract**
+        -   Decide exactly which external inputs the frontend build requires for `preprod`.
+        -   At minimum, define:
+            -   `STATIC_ASSETS_BUCKET`,
+            -   `AWS_REGION`,
+            -   frontend environment values for API base URL, Cognito identifiers, and any hosted asset/config URLs.
+        -   Record how the frontend will distinguish `preprod` from `prod`.
+
+    -   **Phase 3.2: Inventory current frontend build dependencies**
+        -   Inspect the current frontend build to identify monorepo-local assumptions.
+        -   Confirm:
+            -   where the word list is expected before `npm run build:wordfilter`,
+            -   whether XOR filter generation depends only on `margana-word-list.txt`,
+            -   which environment/config values are currently hardcoded,
+            -   whether any frontend build steps reference files outside the frontend repo boundary.
+        -   Treat this as the source-of-truth discovery step before changing CI/CD.
+
+    -   **Phase 3.3: Add build-time word-list retrieval**
+        -   Authenticate to AWS from frontend CI.
+        -   Download `margana-word-list.txt` from the Static Assets bucket during the build.
+        -   Place it in the path expected by the frontend XOR filter build step.
+        -   Fail clearly if the object is missing or cannot be read.
+
+    -   **Phase 3.4: Externalize frontend environment configuration**
+        -   Remove reliance on local-only or monorepo-only configuration assumptions.
+        -   Decide whether frontend config is supplied:
+            -   at build time from Terraform outputs / CI variables, or
+            -   at runtime from a hosted config file.
+        -   Prefer the smallest change that preserves the current frontend architecture.
+
+    -   **Phase 3.5: Add `preprod` frontend CI/CD**
+        -   Standardize Node install/build steps from a clean checkout.
+        -   Fetch the canonical word list from S3.
+        -   Run `npm run build:wordfilter`.
+        -   Build the frontend.
+        -   Publish the frontend to the `preprod` hosting target.
+        -   Invalidate CloudFront if needed.
+        -   Prefer GitHub Actions + AWS OIDC rather than long-lived AWS credentials.
+
+    -   **Phase 3.6: Verify end-to-end behavior in `preprod`**
+        -   Confirm the frontend loads from the `preprod` URL.
+        -   Confirm authentication flows work.
+        -   Confirm frontend API calls hit the split backend correctly.
+        -   Confirm word validation/XOR filter behavior still matches the canonical word list.
+        -   Confirm any shared JSON/data contracts still behave as expected.
+
+    -   **Phase 3.7: Document the frontend operational contract**
+        -   Record required repository variables, AWS role configuration, bucket names, and environment values.
+        -   Document how the frontend receives Terraform-managed configuration.
+        -   Document the build-time dependency on the Static Assets bucket.
+        -   Record the `preprod` rollout procedure so `prod` can follow later.
+
+    **Immediate next step**
+    -   Start with Phase 3.1 and Phase 3.2 together in `margana-web`.
+    -   The first implementation task is to inspect the frontend build and write down:
+        -   where the word list is currently sourced,
+        -   how `build:wordfilter` consumes it,
+        -   which config values the app requires from infrastructure,
+        -   which repo-relative or monorepo-relative paths must be removed during the split.
 
 ### Phase 4: Final Verification & Cutover
 **Goal:** Ensure parity and switch production traffic.
