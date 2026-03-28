@@ -93,6 +93,7 @@ def dbg(msg: str, *, verbose: bool = False):
 
 # -----------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate a 5x5 column-word puzzle JSON.")
     p.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility.")
