@@ -23,6 +23,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v4
         with:
@@ -40,7 +41,7 @@ jobs:
           push: false  # Change to true once ECR login is set up
           tags: margana-puzzle-generator:latest
           cache-from: type=gha
-          cache-to: type=gha,mode=ma
+          cache-to: type=gha,mode=max
 
       - name: Configure AWS credentials from GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v6
