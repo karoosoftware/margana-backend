@@ -78,7 +78,6 @@ ANAGRAM_LEN_DEFAULTS = {"min": 8, "max": 10}
 DEBUG_ENABLED = False
 DEBUG_VERBOSE = False
 
-
 def dbg(msg: str, *, verbose: bool = False):
     try:
         if not DEBUG_ENABLED:
