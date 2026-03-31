@@ -37,12 +37,43 @@ def get_s3_object(bucket_name: str, object_key: str, region_name: str | None, pr
         print(f"... preview truncated at {preview_bytes} bytes")
 
 
+def send_ses_email(
+    source_email: str,
+    destination_email: str,
+    subject: str,
+    body_text: str,
+    region_name: str | None,
+) -> None:
+    import boto3
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    ses = boto3.client("ses", region_name=region_name)
+
+    print(f"Sending SES email from {source_email} to {destination_email}")
+    try:
+        response = ses.send_email(
+            Source=source_email,
+            Destination={"ToAddresses": [destination_email]},
+            Message={
+                "Subject": {"Data": subject},
+                "Body": {"Text": {"Data": body_text}},
+            },
+        )
+    except (BotoCoreError, ClientError) as exc:
+        print(f"SES send failed from {source_email} to {destination_email}: {exc}", file=sys.stderr)
+        raise
+
+    print("SES send succeeded.")
+    print(f"MessageId={response.get('MessageId')}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Margana Puzzle Generator Task")
     parser.add_argument("--target-week", type=str, help="Target week for puzzle generation (YYYY-WW)")
     parser.add_argument("--force", action="store_true", help="Force regeneration if already exists")
     parser.add_argument("--smoke-test", action="store_true", help="Run a basic startup check and exit")
     parser.add_argument("--get-s3", action="store_true", help="Fetch an object from the configured S3 bucket and exit")
+    parser.add_argument("--send-ses", action="store_true", help="Send a test email through SES and exit")
     parser.add_argument(
         "--s3-bucket",
         type=str,
@@ -67,6 +98,30 @@ def main() -> None:
         default=512,
         help="Maximum number of object bytes to print when using --get-s3.",
     )
+    parser.add_argument(
+        "--ses-from",
+        type=str,
+        default=os.environ.get("SES_FROM"),
+        help="SES verified source email address. Defaults to SES_FROM.",
+    )
+    parser.add_argument(
+        "--ses-to",
+        type=str,
+        default=os.environ.get("SES_TO"),
+        help="SES destination email address. Defaults to SES_TO.",
+    )
+    parser.add_argument(
+        "--ses-subject",
+        type=str,
+        default="Margana ECS SES test",
+        help="SES email subject for --send-ses.",
+    )
+    parser.add_argument(
+        "--ses-body",
+        type=str,
+        default="This is a test email sent from the Margana ECS task role.",
+        help="SES plain text email body for --send-ses.",
+    )
 
     args = parser.parse_args()
 
@@ -80,6 +135,14 @@ def main() -> None:
         if not args.s3_key:
             parser.error("--get-s3 requires --s3-key or S3_KEY to be set")
         get_s3_object(args.s3_bucket, args.s3_key, args.aws_region, args.preview_bytes)
+        return
+
+    if args.send_ses:
+        if not args.ses_from:
+            parser.error("--send-ses requires --ses-from or SES_FROM to be set")
+        if not args.ses_to:
+            parser.error("--send-ses requires --ses-to or SES_TO to be set")
+        send_ses_email(args.ses_from, args.ses_to, args.ses_subject, args.ses_body, args.aws_region)
         return
 
     print(f"Starting Margana Puzzle Generator Task for week: {args.target_week}")
