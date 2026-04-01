@@ -14,7 +14,7 @@ Example:
   python3 scripts/generate-column-puzzle.py --output resources/column-puzzle.json
 
   source python/.venv/bin/activate
-  python3 python/ecs/generate-column-puzzle.py --environment preprod --year 2026 --iso-week 6 --diag-direction random --madness-word both --max-path-tries 400 --max-target-tries 300 --max-diag-tries 200 --use-s3-path-layout
+  python3 ecs/generate-column-puzzle.py --environment preprod --year 2026 --iso-week 6 --diag-direction random --madness-word both --max-path-tries 400 --max-target-tries 300 --max-diag-tries 200 --use-s3-path-layout
 
 """
 from __future__ import annotations
@@ -33,6 +33,8 @@ import os
 from margana_gen.word_graph import load_words, longest_constructible_words, constructible_words_min_length
 from margana_gen.usage_log import load_usage_log, save_usage_log, puzzle_in_cooldown, record_puzzle
 from margana_gen.s3_utils import download_usage_log_from_s3, upload_usage_log_to_s3, download_word_list_from_s3
+from margana_gen import column_logic
+from margana_gen.semi_completed_builder import build_semi_completed_payload
 from margana_score import remove_pre_loaded_words
 
 # Optional import of madness builder from sibling file (path-based to handle hyphen in filename)
@@ -59,9 +61,21 @@ WORDLIST_HORIZONTAL_EXCLUDE = RESOURCES_DIR / "horizontal-exclude-words.txt"
 # S3 word list config (fallback if local words file missing)
 WORDLIST_S3_KEY_DEFAULT = "word-lists/margana-word-list.txt"
 
-# Usage log config (reuse Margana usage log file/key by default)
+    # Usage log config (reuse Margana usage log file/key by default)
 USAGE_LOG_FILE = (RESOURCES_DIR / "margana-puzzle-usage-log.json").resolve()
 USAGE_S3_KEY_DEFAULT = "usage-logs/margana-puzzle-usage-log.json"
+
+# Load letter scores (global load for use in scoring and metadata)
+def _load_letter_scores() -> Dict[str, int]:
+    scores_path = RESOURCES_DIR / "letter-scores-v3.json"
+    try:
+        with open(scores_path, "r", encoding="utf-8") as sf:
+            _ls = json.load(sf)
+    except Exception:
+        _ls = {}
+    return {str(k).lower(): int(v) for k, v in _ls.items() if isinstance(v, (int, float))}
+
+LETTER_SCORES = _load_letter_scores()
 
 # ----- Difficulty band defaults derived from 1k-sample (see tmp_sample_scores.csv) -----
 # Percentiles used: P35=167, P50=176, P75=196, P85=207
@@ -160,7 +174,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--month", type=int, default=None, help="Calendar month (1-12) for batch generation")
     p.add_argument("--on-exist", type=str, default="fail", choices=["fail", "skip", "overwrite"],
                    help="Behavior when a day's output folder already exists (default: fail)")
-    p.add_argument("--output-root", type=str, default=str((PROJECT_ROOT / "tmp" / "payloads").resolve()),
+    p.add_argument("--output-root", type=str, default=str((PYTHON_ROOT / "tmp" / "payloads").resolve()),
                    help="Root folder to write batch outputs into")
     p.add_argument("--use-s3-path-layout", action="store_true",
                    help="When set in batch mode, write outputs under <output-root>/<s3-path-prefix>/<YYYY>/<MM>/<DD>/...")
@@ -239,108 +253,15 @@ def choose_rows_for_column_and_diag(
         diag_direction: str,
         horizontal_exclude_set: set[str],
 ) -> Optional[List[str]]:
-    """Choose 5 distinct row words so that for each row r:
-    - row[r][column] == target_col[r]
-    - row[r][diag_idx(r)] == target_diag[r], where diag_idx(r) is r (main) or 4-r (anti)
-    Returns the 5 rows on success, else None.
-
-    Change: prefer higher-scoring words based on resources/letter-scores.json
-    while satisfying both column and diagonal constraints.
-    """
-    if len(target_col) != 5 or len(target_diag) != 5:
-        dbg(f"reject: invalid target lengths col='{target_col}' diag='{target_diag}'", verbose=True)
-        return None
-    if diag_direction not in ("main", "anti"):
-        dbg(f"reject: invalid diag_direction {diag_direction}")
-        return None
-
-    def diag_idx(r: int) -> int:
-        return r if diag_direction == "main" else 4 - r
-
-    dbg(f"try rows for target='{target_col}' column={column} diag='{target_diag}' dir={diag_direction}")
-
-    # Quick feasibility check when constraints overlap at a cell shared by column and the selected diagonal
-    # Overlap happens when column == diag_idx(r) for some r; then target_col[r] must equal target_diag[r].
-    for r in range(5):
-        if column == diag_idx(r):
-            if target_col[r] != target_diag[r]:
-                dbg(f"reject: overlap mismatch at row {r}: col='{target_col[r]}' vs diag='{target_diag[r]}'")
-                return None
-
-    # Load letter scores (minimal local load)
-    scores_path = RESOURCES_DIR / "letter-scores-v3.json"
-    try:
-        with open(scores_path, "r", encoding="utf-8") as sf:
-            _ls = json.load(sf)
-    except Exception:
-        _ls = {}
-    letter_scores = {str(k).lower(): int(v) for k, v in _ls.items() if isinstance(v, (int, float))}
-
-    def _score_word(w: str) -> int:
-        s = 0
-        for ch in w:
-            s += int(letter_scores.get(ch.lower(), 0))
-        return s
-
-    word_score_cache = {w: _score_word(w) for w in words5}
-
-    words5_set = set(words5)
-
-    def _rev_bonus(w: str) -> int:
-        rw = w[::-1]
-        return 1 if rw in words5_set else 0
-
-    # Pre-index by (index -> letter -> list of words)
-    index_buckets: List[dict] = []
-    for i in range(5):
-        d = {}
-        for w in words5:
-            d.setdefault(w[i], []).append(w)
-        index_buckets.append(d)
-
-    used = set()
-    rows: List[str] = []
-    for r in range(5):
-        ch_col = target_col[r]
-        ch_diag = target_diag[r]
-        d_idx = diag_idx(r)
-        # Candidates must match both positions; intersect sets then pick highest score unused
-        cand1 = index_buckets[column].get(ch_col, [])
-        cand2 = index_buckets[d_idx].get(ch_diag, [])
-        dbg(f" row {r}: need col[{column}]='{ch_col}', diag[{d_idx}]='{ch_diag}' | sizes: col={len(cand1)} diag={len(cand2)}",
-            verbose=True)
-        # Intersection via smaller list filter
-        if len(cand1) <= len(cand2):
-            base, other_idx, other_ch = cand1, d_idx, ch_diag
-        else:
-            base, other_idx, other_ch = cand2, column, ch_col
-
-        # Keep only row candidates that are still unused, satisfy the second fixed-letter
-        # constraint for this row, and are not in the horizontal exclude list.
-        filtered = []
-        for w in base:
-            is_unused = w not in used
-            matches_other_constraint = w[other_idx] == other_ch
-            is_not_excluded = w not in horizontal_exclude_set
-            if is_unused and matches_other_constraint and is_not_excluded:
-                filtered.append(w)
-
-        if not filtered:
-            dbg(f"  reject row {r}: no candidates after filtering (used={len(used)})")
-            return None
-        # Tie-break with shuffle, then sort by score desc; prefer words whose reverse is also valid
-        rng.shuffle(filtered)
-        filtered.sort(key=lambda w: (_rev_bonus(w), word_score_cache.get(w, 0)), reverse=True)
-        if DEBUG_ENABLED and DEBUG_VERBOSE:
-            # Show up to 8 top candidates with scores
-            preview = ", ".join(f"{w}:{word_score_cache.get(w, 0)}" for w in filtered[:8])
-            dbg(f"  candidates[{len(filtered)}]: {preview}", verbose=True)
-        chosen = filtered[0]
-        rows.append(chosen)
-        used.add(chosen)
-        dbg(f"  chosen row {r}: '{chosen}' score={word_score_cache.get(chosen, 0)}")
-    dbg(f"success: rows={rows}")
-    return rows
+    return column_logic.choose_rows_for_column_and_diag(
+        target_col=target_col,
+        column=column,
+        target_diag=target_diag,
+        words5=words5,
+        rng=rng,
+        diag_direction=diag_direction,
+        horizontal_exclude_set=horizontal_exclude_set,
+    )
 
 
 def build_puzzle(
@@ -355,109 +276,18 @@ def build_puzzle(
         max_diag_tries: int = 200,
         horizontal_exclude_set: Optional[set[str]] = None,
 ) -> Tuple[str, int, str, str, List[str]]:
-    """Build and return (vertical_target_word, column_index, diagonal_direction, diagonal_target_word, grid_rows[5]).
-
-    Tries forced values when provided; otherwise iterates with retry limits until a consistent grid is found
-    that satisfies both the column target and the diagonal target.
-    """
-    if not words5:
-        raise RuntimeError("No 5-letter words available in the word list.")
-    if diag_direction_pref not in ("main", "anti", "random"):
-        raise RuntimeError("--diag-direction must be one of: main, anti, random")
-
-    words5_set = set(words5)
-
-    def is_valid_target(t: str) -> bool:
-        return len(t) == 5 and t in words5_set
-
-    targets_pool = words5[:]
-    rng.shuffle(targets_pool)
-    diag_pool = words5[:]
-    rng.shuffle(diag_pool)
-    dbg(f"build_puzzle: targets={len(targets_pool)} diag_pool={len(diag_pool)} dir_pref={diag_direction_pref}")
-
-    # Forced paths
-    if target_forced:
-        target = target_forced.lower()
-        if not is_valid_target(target):
-            raise RuntimeError(f"--target '{target_forced}' is not a valid 5-letter word in the list.")
-        cols = [column_forced] if column_forced is not None else list(range(5))
-        if column_forced is None:
-            rng.shuffle(cols)
-        dbg(f"forced target='{target}', columns={cols[:max_column_tries]}")
-        for c in cols[:max_column_tries]:
-            # Determine which diagonal directions to try
-            dirs = ["main", "anti"] if diag_direction_pref == "random" else [diag_direction_pref]
-            rng.shuffle(dirs)
-            dbg(f" column {c}: dirs={dirs}")
-            if diag_target_forced:
-                diag = diag_target_forced.lower()
-                if not is_valid_target(diag):
-                    raise RuntimeError(
-                        f"--diag-target '{diag_target_forced}' is not a valid 5-letter word in the list.")
-                for ddir in dirs:
-                    dbg(f"  try forced diag='{diag}' dir={ddir}")
-                    rows = choose_rows_for_column_and_diag(target, c, diag, words5, rng, ddir, horizontal_exclude_set or set())
-                    if rows:
-                        dbg(f"  success with column={c} dir={ddir} diag='{diag}' rows={rows}")
-                        return target, c, ddir, diag, rows
-                continue
-            # Try multiple diagonal targets
-            tries_d = 0
-            for diag in diag_pool:
-                tries_d += 1
-                if tries_d > max_diag_tries:
-                    break
-                for ddir in dirs:
-                    dbg(f"  try diag[{tries_d}]='{diag}' dir={ddir}", verbose=True)
-                    rows = choose_rows_for_column_and_diag(target, c, diag, words5, rng, ddir, horizontal_exclude_set or set())
-                    if rows:
-                        dbg(f"  success with column={c} dir={ddir} diag='{diag}' rows={rows}")
-                        return target, c, ddir, diag, rows
-        raise RuntimeError(
-            "Unable to build a grid that satisfies both column and diagonal constraints for the forced target.")
-
-    # Unforced path: iterate over targets and columns
-    tries_t = 0
-    for target in targets_pool:
-        tries_t += 1
-        if tries_t > max_target_tries:
-            break
-        cols = [column_forced] if column_forced is not None else list(range(5))
-        if column_forced is None:
-            rng.shuffle(cols)
-        dbg(f"unforced target='{target}': try columns={cols[:max_column_tries]}")
-        for c in cols[:max_column_tries]:
-            # Try forced diagonal first if present
-            dirs = ["main", "anti"] if diag_direction_pref == "random" else [diag_direction_pref]
-            rng.shuffle(dirs)
-            dbg(f" column {c}: dirs={dirs}")
-            if diag_target_forced:
-                diag = diag_target_forced.lower()
-                if not is_valid_target(diag):
-                    raise RuntimeError(
-                        f"--diag-target '{diag_target_forced}' is not a valid 5-letter word in the list.")
-                for ddir in dirs:
-                    dbg(f"  try forced diag='{diag}' dir={ddir}")
-                    rows = choose_rows_for_column_and_diag(target, c, diag, words5, rng, ddir, horizontal_exclude_set or set())
-                    if rows:
-                        dbg(f"  success with column={c} dir={ddir} diag='{diag}' rows={rows}")
-                        return target, c, ddir, diag, rows
-                continue
-            # Otherwise try a few random diagonal targets
-            tries_d = 0
-            for diag in diag_pool:
-                tries_d += 1
-                if tries_d > max_diag_tries:
-                    break
-                for ddir in dirs:
-                    dbg(f"  try diag[{tries_d}]='{diag}' dir={ddir}", verbose=True)
-                    rows = choose_rows_for_column_and_diag(target, c, diag, words5, rng, ddir, horizontal_exclude_set or set())
-                    if rows:
-                        dbg(f"  success with column={c} dir={ddir} diag='{diag}' rows={rows}")
-                        return target, c, ddir, diag, rows
-
-    raise RuntimeError("Failed to construct a 5x5 column+diagonal puzzle within the try limits.")
+    return column_logic.build_puzzle(
+        words5=words5,
+        rng=rng,
+        target_forced=target_forced,
+        column_forced=column_forced,
+        diag_target_forced=diag_target_forced,
+        diag_direction_pref=diag_direction_pref,
+        max_target_tries=max_target_tries,
+        max_column_tries=max_column_tries,
+        max_diag_tries=max_diag_tries,
+        horizontal_exclude_set=horizontal_exclude_set,
+    )
 
 
 import hashlib
@@ -512,164 +342,17 @@ def bonus_for_valid_word(item: dict) -> int:
 
 def compute_lambda_style_total(rows: List[str], col: int, target: str, diag: str, diag_dir: str, words5: List[str],
                                combined_diag_words: List[str], longest_one: str) -> int:
-    """
-    Build a temporary valid_words_metadata exactly like the payload path and
-    sum their scores. This keeps gating totals identical to the final payload.
-    """
-    # Load scores (same file the payload uses)
-    try:
-        with open(RESOURCES_DIR / "letter-scores-v3.json", "r", encoding="utf-8") as sf:
-            letter_scores = json.load(sf)
-    except Exception:
-        letter_scores = {}
-    letter_scores = {str(k).lower(): int(v) for k, v in letter_scores.items() if isinstance(v, (int, float))}
-
-    def score_word(w: str) -> int:
-        if not w:
-            return 0
-        return sum(int(letter_scores.get(ch, 0)) for ch in str(w).lower())
-
-    # Build metadata just like _vw_items + filtering + scoring in payload path
-    words5_set = set(words5)
-    ws_diag = set(combined_diag_words)
-
-    # Collect items
-    items: List[dict] = []
-    n = 5
-    cols_n = 5
-
-    # Rows lr and rl
-    rows_lr = [r for r in rows]
-    rows_rl = [r[::-1] for r in rows_lr]
-    for i, w in enumerate(rows_lr):
-        if w in words5_set:
-            items.append({"word": w, "type": "row", "index": i, "direction": "lr"})
-    for i, w in enumerate(rows_rl):
-        if w in words5_set and w != rows_lr[i]:
-            items.append({"word": w, "type": "row", "index": i, "direction": "rl"})
-
-    # Columns tb/bt (full length only)
-    cols_tb: List[str] = []
-    cols_bt: List[str] = []
-    for cidx in range(cols_n):
-        col_str = "".join(rows[r][cidx] for r in range(n))
-        cols_tb.append(col_str)
-        cols_bt.append(col_str[::-1])
-    for j, w in enumerate(cols_tb):
-        if w in words5_set:
-            items.append({"word": w, "type": "column", "index": j, "direction": "tb"})
-    for j, w in enumerate(cols_bt):
-        if w in words5_set and w != cols_tb[j]:
-            items.append({"word": w, "type": "column", "index": j, "direction": "bt"})
-
-    # Diagonals: edge-to-edge substrings length 3..5 in both dirs
-    def on_edge(r: int, c: int) -> bool:
-        return r == 0 or c == 0 or r == n - 1 or c == cols_n - 1
-
-    main_paths: List[List[Tuple[int, int]]] = []
-    anti_paths: List[List[Tuple[int, int]]] = []
-
-    # main paths
-    for c0 in range(cols_n):
-        path = []
-        r, c = 0, c0
-        while r < n and c < cols_n:
-            path.append((r, c))
-            r += 1
-            c += 1
-        if len(path) >= 2:
-            main_paths.append(path)
-    for r0 in range(1, n):
-        path = []
-        r, c = r0, 0
-        while r < n and c < cols_n:
-            path.append((r, c))
-            r += 1
-            c += 1
-        if len(path) >= 2:
-            main_paths.append(path)
-
-    # anti paths
-    for c0 in range(cols_n - 1, -1, -1):
-        path = []
-        r, c = 0, c0
-        while r < n and c >= 0:
-            path.append((r, c))
-            r += 1
-            c -= 1
-        if len(path) >= 2:
-            anti_paths.append(path)
-    for r0 in range(1, n):
-        path = []
-        r, c = r0, cols_n - 1
-        while r < n and c >= 0:
-            path.append((r, c))
-            r += 1
-            c -= 1
-        if len(path) >= 2:
-            anti_paths.append(path)
-
-    allowed_lengths = {3, 4, 5}
-
-    def add_diag_items(paths: List[List[Tuple[int, int]]], forward_dir: str, reverse_dir: str):
-        for path in paths:
-            letters = "".join(rows[r][c] for r, c in path)
-            L = len(path)
-            for i in range(L):
-                for j in range(i + 1, L):
-                    seg_len = j - i + 1
-                    if seg_len not in allowed_lengths:
-                        continue
-                    (sr, sc) = path[i]
-                    (er, ec) = path[j]
-                    if not (on_edge(sr, sc) and on_edge(er, ec)):
-                        continue
-                    word_fwd = letters[i:j + 1]
-                    word_rev = word_fwd[::-1]
-                    if word_fwd in ws_diag:
-                        items.append({"word": word_fwd, "type": "diagonal", "index": 0, "direction": forward_dir,
-                                      "start_index": {"r": sr, "c": sc}, "end_index": {"r": er, "c": ec}})
-                    # Only append the reverse direction if it's not a palindrome (avoid duplicates)
-                    if word_rev in ws_diag and word_rev != word_fwd:
-                        items.append({"word": word_rev, "type": "diagonal", "index": 0, "direction": reverse_dir,
-                                      "start_index": {"r": er, "c": ec}, "end_index": {"r": sr, "c": sc}})
-
-    add_diag_items(main_paths, "main", "main_rev")
-    add_diag_items(anti_paths, "anti", "anti_rev")
-
-    # The below code was removed in place of using the shared lib remove_pre_loaded_words
-    # This was due to the current code allowing for a vt or dt to be included in the valid_words_metadata
-    # when it was read backwards.
-    #
-    # Remove the generated targets from metadata like payload does
-    # vt = (target or "").lower()
-    # dt = (diag or "").lower()
-    # if vt or dt:
-    #     items = [it for it in items if (str(it.get("word") or "").lower() not in {vt, dt})]
-
-    exclusion_meta = {
-        "wordLength": 5,
-        "columnIndex": col,
-        "diagonalDirection": diag_dir,
-        "verticalTargetWord": target,
-        "diagonalTargetWord": diag,
-    }
-    items = remove_pre_loaded_words(exclusion_meta, items)
-
-    # Add longest anagram once
-    if longest_one:
-        items.append({"word": longest_one, "type": "anagram", "index": 0, "direction": "builder"})
-
-    # Score like payload (palindromes double, anagram not special)
-    total = 0
-    for it in items:
-        w = str(it.get("word") or "")
-        typ = it.get("type")
-        base = score_word(w)
-        is_pal = (typ != "anagram") and (w == w[::-1] and len(w) > 0)
-        score = base * 2 if is_pal else base
-        total += int(score)
-    return int(total)
+    return column_logic.compute_lambda_style_total(
+        rows=rows,
+        col=col,
+        target=target,
+        diag=diag,
+        diag_dir=diag_dir,
+        words5=words5,
+        combined_diag_words=combined_diag_words,
+        longest_one=longest_one,
+        letter_scores=LETTER_SCORES,
+    )
 
 def main():
     args = parse_args()
@@ -1053,7 +736,7 @@ def main():
                         _mad_path = list(_path) if _path else None
                         _mad_word = str(_mad_word) if _mad_word else None
                     else:
-                        target, col, diag_dir, diag, rows = build_puzzle(
+                        target, col, diag_dir, diag, rows = column_logic.build_puzzle(
                             words5=words5,
                             rng=rng,
                             target_forced=args.target,
@@ -1408,9 +1091,8 @@ def main():
                         continue
                     if typ == "row":
                         bucket = "lr" if direction == "lr" else ("rl" if direction == "rl" else None)
-                        if bucket and w not in _seen_map["rows"][bucket]:
-                            valid_words_map["rows"][bucket].append(w);
-                            _seen_map["rows"][bucket].add(w)
+                        if bucket:
+                            valid_words_map["rows"][bucket].append(w)
                     elif typ == "column":
                         bucket = "tb" if direction == "tb" else ("bt" if direction == "bt" else None)
                         if bucket and w not in _seen_map["columns"][bucket]:
@@ -1862,7 +1544,7 @@ def main():
                         _madness_word = None
                         continue
             else:
-                target, col, diag_dir, diag, rows = build_puzzle(
+                target, col, diag_dir, diag, rows = column_logic.build_puzzle(
                     words5=words5,
                     rng=rng,
                     target_forced=args.target,
@@ -1918,7 +1600,15 @@ def main():
                 longest_one_try = ""
 
         # ---- Compute the exact total using payload rules and this chosen anagram ----
-        exact_total = compute_lambda_style_total(
+        # Load scores (same file the payload uses)
+        try:
+            with open(RESOURCES_DIR / "letter-scores-v3.json", "r", encoding="utf-8") as sf:
+                _ls_data = json.load(sf)
+        except Exception:
+            _ls_data = {}
+        _ls = {str(k).lower(): int(v) for k, v in _ls_data.items() if isinstance(v, (int, float))}
+
+        exact_total = column_logic.compute_lambda_style_total(
             rows=rows,
             col=col,
             target=target,
@@ -1927,6 +1617,7 @@ def main():
             words5=words5,
             combined_diag_words=_combined_diag_words,
             longest_one=longest_one_try,
+            letter_scores=_ls
         )
 
         # ---- Resolve difficulty thresholds (including random) ----
@@ -2559,9 +2250,8 @@ def main():
             continue
         if typ == "row":
             bucket = "lr" if direction == "lr" else ("rl" if direction == "rl" else None)
-            if bucket and w not in seen_map["rows"][bucket]:
-                valid_words_map["rows"][bucket].append(w);
-                seen_map["rows"][bucket].add(w)
+            if bucket:
+                valid_words_map["rows"][bucket].append(w)
         elif typ == "column":
             bucket = "tb" if direction == "tb" else ("bt" if direction == "bt" else None)
             if bucket and w not in seen_map["columns"][bucket]:
@@ -2651,18 +2341,6 @@ def main():
         print(f"Warning: failed to write {completed_path}: {e}")
 
     # Semi-completed payload: hide scores and completed words, and mask grid_rows
-    def _mask_rows(rows_in: List[str], column_index: int, diag_direction: str) -> List[str]:
-        masked: List[str] = []
-        for r in range(5):
-            row_chars = list(rows_in[r])
-            for c in range(5):
-                on_col = (c == column_index)
-                on_diag = (diag_direction == "main" and c == r) or (diag_direction == "anti" and c == 4 - r)
-                row_chars[c] = row_chars[c] if (on_col or on_diag) else '*'
-            masked.append("".join(row_chars))
-        return masked
-
-    # Compose semi-completed view without revealing full solutions
     # Compute a deterministic shuffled version of the longest anagram (if any)
     def _shuffle_word_deterministic(word: str, seed_key: str) -> str:
         if not word:
@@ -2682,26 +2360,23 @@ def main():
     longest_anagram_shuffled = _shuffle_word_deterministic(longest_one.lower(),
                                                            f"{layout_id}|{today}|{longest_one}") if longest_one else None
 
-    semi_output = {
-        "date": today,
-        "id": pid,
-        "chain_id": layout_id,
-        "word_length": 5,
-        "vertical_target_word": target,
-        "column_index": col,
-        "diagonal_direction": diag_dir,
-        "diagonal_target_word": diag,
-        "grid_rows": _mask_rows(rows, col, diag_dir),
-        # Only expose the length of the longest anagram
-        "longest_anagram_count": len(longest_one),
-        # Provide a shuffled version of the longest anagram (camelCase as requested)
-        "longestAnagramShuffled": longest_anagram_shuffled,
-        # Minimal flag for UI: true if this puzzle was generated in Madness mode (no details leaked)
-        "madnessAvailable": bool(_was_madness),
-        # Difficulty band metadata (requested fields)
-        "difficultyBandType": _diff_type2,
-        "difficultyBandApplied": _diff_applied2,
-    }
+    semi_output = build_semi_completed_payload(
+        date=today,
+        puzzle_id=pid,
+        layout_id=layout_id,
+        vertical_target_word=target,
+        column_index=col,
+        diagonal_direction=diag_dir,
+        diagonal_target_word=diag,
+        rows=rows,
+        longest_anagram_count=len(longest_one),
+        longest_anagram_shuffled=longest_anagram_shuffled,
+        extra_fields={
+            "madnessAvailable": bool(_was_madness),
+            "difficultyBandType": _diff_type2,
+            "difficultyBandApplied": _diff_applied2,
+        },
+    )
 
     semi_path = RESOURCES_DIR / "margana-semi-completed.json"
     try:

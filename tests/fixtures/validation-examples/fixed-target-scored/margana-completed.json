@@ -1,0 +1,65 @@
+{
+  "saved_at": "2026-02-20T00:00:00Z",
+  "vertical_target_word": "gaudy",
+  "diagonal_target_word": "tends",
+  "diagonal_direction": "main",
+  "meta": {
+    "date": "2026-02-20",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 0,
+    "diagonalDirection": "main",
+    "verticalTargetWord": "gaudy",
+    "diagonalTargetWord": "tends",
+    "longestAnagram": "abcdefgh",
+    "longestAnagramCount": 8,
+    "madnessAvailable": false,
+    "madnessWord": null,
+    "madnessDirection": null,
+    "madnessPath": null,
+    "madnessScore": null,
+    "difficultyBandType": "fixed",
+    "difficultyBandApplied": "easy"
+  },
+  "grid_rows": [
+    "gaudy",
+    "abcde",
+    "fghij",
+    "klmno",
+    "pqrst"
+  ],
+  "valid_words": {
+    "rows": {
+      "lr": [
+        "gaudy",
+        "abcde",
+        "fghij",
+        "klmno",
+        "pqrst"
+      ],
+      "rl": []
+    }
+  },
+  "valid_words_metadata": [
+    {
+      "word": "gaudy",
+      "type": "column",
+      "index": 0,
+      "direction": "tb",
+      "base_score": 10,
+      "bonus": 0,
+      "score": 10
+    },
+    {
+      "word": "abcdefgh",
+      "type": "anagram",
+      "index": 0,
+      "direction": "builder",
+      "base_score": 8,
+      "bonus": 0,
+      "score": 8
+    }
+  ],
+  "total_score": 18
+}

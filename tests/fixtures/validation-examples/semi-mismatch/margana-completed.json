@@ -1,0 +1,67 @@
+{
+  "saved_at": "2026-02-22T00:00:00Z",
+  "vertical_target_word": "aloes",
+  "diagonal_target_word": "mocks",
+  "diagonal_direction": "main",
+  "meta": {
+    "date": "2026-02-22",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 4,
+    "diagonalDirection": "main",
+    "verticalTargetWord": "aloes",
+    "diagonalTargetWord": "mocks",
+    "longestAnagram": "boardwalks",
+    "longestAnagramCount": 10,
+    "madnessAvailable": false,
+    "madnessWord": null,
+    "madnessDirection": null,
+    "madnessPath": null,
+    "madnessScore": null,
+    "difficultyBandType": "random",
+    "difficultyBandApplied": "hard"
+  },
+  "grid_rows": [
+    "mamba",
+    "vowel",
+    "wacko",
+    "quake",
+    "draws"
+  ],
+  "valid_words": {
+    "rows": {
+      "lr": [
+        "mamba",
+        "vowel",
+        "wacko",
+        "quake",
+        "draws"
+      ],
+      "rl": [
+        "sward"
+      ]
+    }
+  },
+  "valid_words_metadata": [
+    {
+      "word": "mamba",
+      "type": "row",
+      "index": 0,
+      "direction": "lr",
+      "base_score": 25,
+      "bonus": 0,
+      "score": 25
+    },
+    {
+      "word": "boardwalks",
+      "type": "anagram",
+      "index": 0,
+      "direction": "builder",
+      "base_score": 46,
+      "bonus": 0,
+      "score": 46
+    }
+  ],
+  "total_score": 71
+}

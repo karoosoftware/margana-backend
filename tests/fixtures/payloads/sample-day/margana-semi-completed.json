@@ -1,0 +1,22 @@
+{
+  "date": "2026-02-02",
+  "id": "b37f184534",
+  "chain_id": "de348fcbe5",
+  "word_length": 5,
+  "vertical_target_word": "umbel",
+  "column_index": 1,
+  "diagonal_direction": "main",
+  "diagonal_target_word": "amide",
+  "grid_rows": [
+    "au***",
+    "*m***",
+    "*bi**",
+    "*e*d*",
+    "*l**e"
+  ],
+  "longest_anagram_count": 10,
+  "longestAnagramShuffled": "deusdinrez",
+  "madnessAvailable": false,
+  "difficultyBandType": "random",
+  "difficultyBandApplied": "xtream"
+}

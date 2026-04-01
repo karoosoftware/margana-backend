@@ -1,0 +1,20 @@
+{
+  "date": "2026-02-22",
+  "word_length": 5,
+  "vertical_target_word": "aloes",
+  "column_index": 4,
+  "diagonal_direction": "main",
+  "diagonal_target_word": "mocks",
+  "grid_rows": [
+    "z***a",
+    "*o**l",
+    "**c*o",
+    "***ke",
+    "****s"
+  ],
+  "longest_anagram_count": 10,
+  "longestAnagramShuffled": "bwsaordkla",
+  "madnessAvailable": false,
+  "difficultyBandType": "random",
+  "difficultyBandApplied": "hard"
+}

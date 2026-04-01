@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import types
+from pathlib import Path
+import subprocess
+
+from ecs import main as ecs_main
+
+
+class _FakeBody:
+    def __init__(self, data: bytes):
+        self._data = data
+
+    def read(self) -> bytes:
+        return self._data
+
+
+class _FakeS3Client:
+    def __init__(self, payloads: dict[str, bytes]):
+        self.payloads = payloads
+
+    def get_object(self, Bucket: str, Key: str):
+        return {"Body": _FakeBody(self.payloads[Key])}
+
+
+def test_download_static_assets_writes_expected_files(tmp_path, monkeypatch):
+    payloads = {
+        "margana-word-list.txt": b"alpha\nbravo\n",
+        "horizontal-exclude-words.txt": b"avoid\n",
+        "letter-scores-v3.json": b"{\"a\": 1}\n",
+    }
+
+    fake_boto3 = types.SimpleNamespace(client=lambda service, region_name=None: _FakeS3Client(payloads))
+    monkeypatch.setitem(__import__("sys").modules, "boto3", fake_boto3)
+
+    downloaded = ecs_main.download_static_assets(
+        bucket_name="margana-static-assets-preprod",
+        region_name="eu-west-1",
+        assets_dir=str(tmp_path),
+        word_list_key="margana-word-list.txt",
+        horizontal_exclude_key="horizontal-exclude-words.txt",
+        letter_scores_key="letter-scores-v3.json",
+    )
+
+    assert Path(downloaded["word_list"]).read_text(encoding="utf-8") == "alpha\nbravo\n"
+    assert Path(downloaded["horizontal_exclude"]).read_text(encoding="utf-8") == "avoid\n"
+    assert Path(downloaded["letter_scores"]).read_text(encoding="utf-8") == "{\"a\": 1}\n"
+
+
+def test_main_download_static_assets_mode_downloads_and_exits(tmp_path, monkeypatch, capsys):
+    called = {}
+
+    def fake_download_static_assets(**kwargs):
+        called.update(kwargs)
+        return {"word_list": str(tmp_path / "margana-word-list.txt")}
+
+    monkeypatch.setattr(ecs_main, "download_static_assets", fake_download_static_assets)
+
+    ecs_main.main(
+        [
+            "--download-static-assets",
+            "--assets-dir",
+            str(tmp_path),
+            "--static-assets-bucket",
+            "margana-static-assets-preprod",
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert called["bucket_name"] == "margana-static-assets-preprod"
+    assert called["assets_dir"] == str(tmp_path)
+    assert "Static assets downloaded successfully." in out
+
+
+def test_stage_assets_for_generator_copies_to_target_root(tmp_path):
+    assets_dir = tmp_path / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "margana-word-list.txt").write_text("alpha\n", encoding="utf-8")
+    (assets_dir / "horizontal-exclude-words.txt").write_text("avoid\n", encoding="utf-8")
+    (assets_dir / "letter-scores-v3.json").write_text("{\"a\":1}\n", encoding="utf-8")
+
+    staged = ecs_main.stage_assets_for_generator(
+        {
+            "word_list": str(assets_dir / "margana-word-list.txt"),
+            "horizontal_exclude": str(assets_dir / "horizontal-exclude-words.txt"),
+            "letter_scores": str(assets_dir / "letter-scores-v3.json"),
+        },
+        str(tmp_path / "target"),
+    )
+
+    assert Path(staged["word_list"]).read_text(encoding="utf-8") == "alpha\n"
+    assert Path(staged["horizontal_exclude"]).read_text(encoding="utf-8") == "avoid\n"
+    assert Path(staged["letter_scores"]).read_text(encoding="utf-8") == "{\"a\":1}\n"
+
+
+def test_main_runs_generation_pipeline_for_target_week(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        ecs_main,
+        "download_static_assets",
+        lambda **kwargs: {
+            "word_list": str(tmp_path / "downloaded-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "downloaded-horizontal.txt"),
+            "letter_scores": str(tmp_path / "downloaded-scores.json"),
+        },
+    )
+    monkeypatch.setattr(
+        ecs_main,
+        "stage_assets_for_generator",
+        lambda downloaded_assets, target_root: {
+            "word_list": str(tmp_path / "staged-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "staged-horizontal.txt"),
+            "letter_scores": str(tmp_path / "staged-scores.json"),
+        },
+    )
+    usage_downloads = []
+    usage_uploads = []
+
+    monkeypatch.setattr(
+        ecs_main,
+        "download_s3_object_to_file",
+        lambda bucket_name, object_key, destination_path, region_name: usage_downloads.append(
+            (bucket_name, object_key, destination_path, region_name)
+        ),
+    )
+    monkeypatch.setattr(
+        ecs_main,
+        "upload_file_to_s3",
+        lambda source_path, bucket_name, object_key, region_name, content_type: usage_uploads.append(
+            (source_path, bucket_name, object_key, region_name, content_type)
+        ),
+    )
+
+    captured = {}
+
+    def fake_run_generation_pipeline(config, *, cwd=None):
+        captured["config"] = config
+        captured["cwd"] = cwd
+        return (
+            subprocess.CompletedProcess(["generator"], 0),
+            subprocess.CompletedProcess(["validator"], 0),
+        )
+
+    monkeypatch.setattr(ecs_main, "run_generation_pipeline", fake_run_generation_pipeline)
+
+    ecs_main.main(["--target-week", "2026-14", "--output-root", str(tmp_path / "payloads")])
+
+    out = capsys.readouterr().out
+    config = captured["config"]
+    assert config.payload_dir == tmp_path / "payloads"
+    assert "--year" in config.generator_args
+    assert "2026" in config.generator_args
+    assert "--iso-week" in config.generator_args
+    assert "14" in config.generator_args
+    assert "--words-file" in config.generator_args
+    assert str(tmp_path / "staged-word-list.txt") in config.generator_args
+    assert "--no-s3-usage" in config.generator_args
+    assert config.validator_args == ["--summary-only"]
+    assert usage_downloads[0][0] == "margana-word-game-preprod"
+    assert usage_downloads[0][1] == "usage-logs/margana-puzzle-usage-log.json"
+    assert usage_uploads[0][1] == "margana-word-game-preprod"
+    assert "Task completed successfully." in out

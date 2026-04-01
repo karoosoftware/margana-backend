@@ -1,0 +1,67 @@
+{
+  "saved_at": "2026-02-21T00:00:00Z",
+  "vertical_target_word": "abcde",
+  "diagonal_target_word": "abcde",
+  "diagonal_direction": "main",
+  "meta": {
+    "date": "2026-02-21",
+    "rows": 5,
+    "cols": 5,
+    "wordLength": 5,
+    "columnIndex": 0,
+    "diagonalDirection": "main",
+    "verticalTargetWord": "abcde",
+    "diagonalTargetWord": "abcde",
+    "longestAnagram": "viewsvod",
+    "longestAnagramCount": 8,
+    "madnessAvailable": false,
+    "madnessWord": null,
+    "madnessDirection": null,
+    "madnessPath": null,
+    "madnessScore": null,
+    "difficultyBandType": "fixed",
+    "difficultyBandApplied": "easy"
+  },
+  "grid_rows": [
+    "views",
+    "vodka",
+    "lager",
+    "queue",
+    "furze"
+  ],
+  "valid_words": {
+    "rows": {
+      "lr": [
+        "views",
+        "vodka",
+        "lager",
+        "queue",
+        "furze"
+      ],
+      "rl": [
+        "regal"
+      ]
+    }
+  },
+  "valid_words_metadata": [
+    {
+      "word": "views",
+      "type": "row",
+      "index": 0,
+      "direction": "lr",
+      "base_score": 25,
+      "bonus": 5,
+      "score": 30
+    },
+    {
+      "word": "viewsvod",
+      "type": "anagram",
+      "index": 0,
+      "direction": "builder",
+      "base_score": 40,
+      "bonus": 0,
+      "score": 40
+    }
+  ],
+  "total_score": 70
+}
