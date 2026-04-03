@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import types
 from pathlib import Path
 import subprocess
@@ -21,6 +22,29 @@ class _FakeS3Client:
 
     def get_object(self, Bucket: str, Key: str):
         return {"Body": _FakeBody(self.payloads[Key])}
+
+
+def _write_completed_payloads(root: Path, count: int) -> None:
+    start_day = 30
+    for offset in range(count):
+        day = start_day + offset
+        month = "03" if day <= 31 else "04"
+        dom = day if day <= 31 else day - 31
+        payload_root = root / "public" / "daily-puzzles" / "2026" / month / f"{dom:02d}"
+        payload_root.mkdir(parents=True, exist_ok=True)
+        payload_root.joinpath("margana-completed.json").write_text(
+            json.dumps(
+                {
+                    "total_score": 174 + offset,
+                    "meta": {
+                        "date": f"2026-{month}-{dom:02d}",
+                        "difficultyBandApplied": "easy",
+                        "madnessAvailable": False,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
 
 
 def test_download_static_assets_writes_expected_files(tmp_path, monkeypatch):
@@ -94,6 +118,8 @@ def test_stage_assets_for_generator_copies_to_target_root(tmp_path):
 
 
 def test_main_runs_generation_pipeline_for_target_week(tmp_path, monkeypatch, capsys):
+    _write_completed_payloads(tmp_path / "payloads", 7)
+
     monkeypatch.setattr(
         ecs_main,
         "download_static_assets",
@@ -153,9 +179,156 @@ def test_main_runs_generation_pipeline_for_target_week(tmp_path, monkeypatch, ca
     assert "14" in config.generator_args
     assert "--words-file" in config.generator_args
     assert str(tmp_path / "staged-word-list.txt") in config.generator_args
+    assert "--max-usage-tries" in config.generator_args
+    assert "200" in config.generator_args
+    assert "--cooldown-days" in config.generator_args
+    assert "1826" in config.generator_args
     assert "--no-s3-usage" in config.generator_args
-    assert config.validator_args == ["--summary-only"]
+    assert config.validator_args == [
+        "--summary-only",
+        "--horizontal-exclude-file",
+        str(tmp_path / "staged-horizontal.txt"),
+    ]
     assert usage_downloads[0][0] == "margana-word-game-preprod"
     assert usage_downloads[0][1] == "usage-logs/margana-puzzle-usage-log.json"
     assert usage_uploads[0][1] == "margana-word-game-preprod"
     assert "Task completed successfully." in out
+
+
+def test_main_print_payloads_outputs_generated_json(tmp_path, monkeypatch, capsys):
+    _write_completed_payloads(tmp_path / "payloads", 7)
+    payload_root = tmp_path / "payloads" / "public" / "daily-puzzles" / "2026" / "03" / "30"
+    (payload_root / "margana-semi-completed.json").write_text('{"kind":"semi"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        ecs_main,
+        "download_static_assets",
+        lambda **kwargs: {
+            "word_list": str(tmp_path / "downloaded-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "downloaded-horizontal.txt"),
+            "letter_scores": str(tmp_path / "downloaded-scores.json"),
+        },
+    )
+    monkeypatch.setattr(
+        ecs_main,
+        "stage_assets_for_generator",
+        lambda downloaded_assets, target_root: {
+            "word_list": str(tmp_path / "staged-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "staged-horizontal.txt"),
+            "letter_scores": str(tmp_path / "staged-scores.json"),
+        },
+    )
+    monkeypatch.setattr(ecs_main, "download_s3_object_to_file", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ecs_main, "upload_file_to_s3", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        ecs_main,
+        "run_generation_pipeline",
+        lambda config, *, cwd=None: (
+            subprocess.CompletedProcess(["generator"], 0),
+            subprocess.CompletedProcess(["validator"], 0),
+        ),
+    )
+
+    ecs_main.main(
+        [
+            "--target-week",
+            "2026-14",
+            "--output-root",
+            str(tmp_path / "payloads"),
+            "--print-payloads",
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert "===== " in out
+    assert '"total_score": 174' in out
+    assert '"kind": "semi"' in out
+
+
+def test_main_print_payload_summary_outputs_compact_lines(tmp_path, monkeypatch, capsys):
+    _write_completed_payloads(tmp_path / "payloads", 7)
+
+    monkeypatch.setattr(
+        ecs_main,
+        "download_static_assets",
+        lambda **kwargs: {
+            "word_list": str(tmp_path / "downloaded-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "downloaded-horizontal.txt"),
+            "letter_scores": str(tmp_path / "downloaded-scores.json"),
+        },
+    )
+    monkeypatch.setattr(
+        ecs_main,
+        "stage_assets_for_generator",
+        lambda downloaded_assets, target_root: {
+            "word_list": str(tmp_path / "staged-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "staged-horizontal.txt"),
+            "letter_scores": str(tmp_path / "staged-scores.json"),
+        },
+    )
+    monkeypatch.setattr(ecs_main, "download_s3_object_to_file", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ecs_main, "upload_file_to_s3", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        ecs_main,
+        "run_generation_pipeline",
+        lambda config, *, cwd=None: (
+            subprocess.CompletedProcess(["generator"], 0),
+            subprocess.CompletedProcess(["validator"], 0),
+        ),
+    )
+
+    ecs_main.main(
+        [
+            "--target-week",
+            "2026-14",
+            "--output-root",
+            str(tmp_path / "payloads"),
+            "--print-payload-summary",
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert "PAYLOAD date=2026-03-30 score=174 band=easy madness=False" in out
+    assert '"difficultyBandApplied"' not in out
+
+
+def test_main_fails_when_target_week_is_incomplete(tmp_path, monkeypatch):
+    _write_completed_payloads(tmp_path / "payloads", 4)
+
+    monkeypatch.setattr(
+        ecs_main,
+        "download_static_assets",
+        lambda **kwargs: {
+            "word_list": str(tmp_path / "downloaded-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "downloaded-horizontal.txt"),
+            "letter_scores": str(tmp_path / "downloaded-scores.json"),
+        },
+    )
+    monkeypatch.setattr(
+        ecs_main,
+        "stage_assets_for_generator",
+        lambda downloaded_assets, target_root: {
+            "word_list": str(tmp_path / "staged-word-list.txt"),
+            "horizontal_exclude": str(tmp_path / "staged-horizontal.txt"),
+            "letter_scores": str(tmp_path / "staged-scores.json"),
+        },
+    )
+    monkeypatch.setattr(ecs_main, "download_s3_object_to_file", lambda *args, **kwargs: None)
+    upload_calls = []
+    monkeypatch.setattr(ecs_main, "upload_file_to_s3", lambda *args, **kwargs: upload_calls.append(args))
+    monkeypatch.setattr(
+        ecs_main,
+        "run_generation_pipeline",
+        lambda config, *, cwd=None: (
+            subprocess.CompletedProcess(["generator"], 0),
+            subprocess.CompletedProcess(["validator"], 0),
+        ),
+    )
+
+    try:
+        ecs_main.main(["--target-week", "2026-14", "--output-root", str(tmp_path / "payloads")])
+        assert False, "Expected SystemExit for incomplete week"
+    except SystemExit as exc:
+        assert exc.code == 1
+
+    assert upload_calls == []

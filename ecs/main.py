@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import shutil
 import sys
@@ -151,6 +152,30 @@ def parse_target_week(target_week: str) -> tuple[int, int]:
         raise ValueError("Expected --target-week in YYYY-WW format") from exc
 
 
+def print_payload_files(payload_root: Path) -> None:
+    for payload_path in sorted(payload_root.rglob("*.json")):
+        print(f"===== {payload_path} =====")
+        print(json.dumps(json.loads(payload_path.read_text(encoding="utf-8")), indent=2))
+
+
+def print_payload_summaries(payload_root: Path) -> None:
+    for payload_path in sorted(payload_root.rglob("margana-completed.json")):
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        meta = payload.get("meta", {})
+        print(
+            "PAYLOAD"
+            f" date={meta.get('date')}"
+            f" score={payload.get('total_score')}"
+            f" band={meta.get('difficultyBandApplied')}"
+            f" madness={meta.get('madnessAvailable')}"
+            f" path={payload_path}"
+        )
+
+
+def count_completed_payloads(payload_root: Path) -> int:
+    return sum(1 for _ in payload_root.rglob("margana-completed.json"))
+
+
 def send_ses_email(
     source_email: str,
     destination_email: str,
@@ -184,6 +209,12 @@ def send_ses_email(
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Margana Puzzle Generator Task")
     parser.add_argument("--target-week", type=str, help="Target week for puzzle generation (YYYY-WW)")
+    parser.add_argument("--print-payloads", action="store_true", help="Print generated JSON payload files after a successful run")
+    parser.add_argument(
+        "--print-payload-summary",
+        action="store_true",
+        help="Print a one-line summary for each generated completed payload after a successful run",
+    )
     parser.add_argument("--environment", type=str, default=os.environ.get("PUZZLE_ENVIRONMENT", "preprod"))
     parser.add_argument("--force", action="store_true", help="Force regeneration if already exists")
     parser.add_argument("--smoke-test", action="store_true", help="Run a basic startup check and exit")
@@ -196,6 +227,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--max-path-tries", type=int, default=int(os.environ.get("MAX_PATH_TRIES", "400")))
     parser.add_argument("--max-target-tries", type=int, default=int(os.environ.get("MAX_TARGET_TRIES", "300")))
     parser.add_argument("--max-diag-tries", type=int, default=int(os.environ.get("MAX_DIAG_TRIES", "200")))
+    parser.add_argument("--max-usage-tries", type=int, default=int(os.environ.get("MAX_USAGE_TRIES", "200")))
+    parser.add_argument("--cooldown-days", type=int, default=int(os.environ.get("COOLDOWN_DAYS", "1826")))
     parser.add_argument("--use-s3-path-layout", action="store_true", default=True)
     parser.add_argument(
         "--s3-bucket",
@@ -367,6 +400,10 @@ def main(argv: list[str] | None = None) -> None:
         str(args.max_target_tries),
         "--max-diag-tries",
         str(args.max_diag_tries),
+        "--max-usage-tries",
+        str(args.max_usage_tries),
+        "--cooldown-days",
+        str(args.cooldown_days),
         "--words-file",
         staged["word_list"],
         "--no-s3-usage",
@@ -377,7 +414,7 @@ def main(argv: list[str] | None = None) -> None:
     config = GeneratorWrapperConfig(
         payload_dir=Path(args.output_root),
         generator_args=generator_args,
-        validator_args=["--summary-only"],
+        validator_args=["--summary-only", "--horizontal-exclude-file", staged["horizontal_exclude"]],
     )
     generator_result, validator_result = run_generation_pipeline(config, cwd=Path(__file__).resolve().parents[1])
     if generator_result.returncode != 0:
@@ -387,6 +424,14 @@ def main(argv: list[str] | None = None) -> None:
     if validator_result.returncode != 0:
         raise SystemExit(validator_result.returncode)
 
+    completed_payloads = count_completed_payloads(Path(args.output_root))
+    if completed_payloads != 7:
+        print(
+            f"Expected 7 completed payloads for ISO week {args.target_week}, found {completed_payloads}.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     upload_file_to_s3(
         usage_log_path,
         usage_log_bucket,
@@ -394,6 +439,12 @@ def main(argv: list[str] | None = None) -> None:
         args.aws_region,
         content_type="application/json",
     )
+
+    if args.print_payload_summary:
+        print_payload_summaries(Path(args.output_root))
+
+    if args.print_payloads:
+        print_payload_files(Path(args.output_root))
 
     print("Task completed successfully.")
 

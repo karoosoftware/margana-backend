@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Protocol
 
+from margana_gen.generator_difficulty import band_for_total_score
+
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -31,6 +33,7 @@ class PuzzleValidationContext:
     completed_payload: dict[str, Any]
     semi_completed_payload: dict[str, Any] | None = None
     letter_scores: dict[str, int] = field(default_factory=dict)
+    horizontal_exclude_words: set[str] = field(default_factory=set)
 
     @property
     def meta(self) -> dict[str, Any]:
@@ -108,6 +111,7 @@ def default_rules(*, min_anagram_len: int = 8, max_anagram_len: int = 10) -> lis
     return [
         GridShapeRule(),
         ValidWordsRowsConsistencyRule(),
+        HorizontalExcludeRule(),
         TopLevelTargetConsistencyRule(),
         LongestAnagramCountRule(),
         ColumnTargetRule(),
@@ -116,7 +120,9 @@ def default_rules(*, min_anagram_len: int = 8, max_anagram_len: int = 10) -> lis
         AnagramMetadataConsistencyRule(),
         AnagramLetterInventoryRule(),
         MadnessConsistencyRule(),
+        MadnessPathRule(),
         SemiCompletedConsistencyRule(),
+        DifficultyBandConsistencyRule(),
         FixedTargetExclusionRule(),
         BonusAlwaysZeroRule(),
         TotalScoreRule(),
@@ -234,6 +240,44 @@ class ValidWordsRowsConsistencyRule:
                         details={"word": word, "reversed_lr_words": sorted(reversed_lr_words)},
                     )
                 )
+        return issues
+
+
+class HorizontalExcludeRule:
+    name = "horizontal_exclude"
+
+    def validate(self, ctx: PuzzleValidationContext) -> list[ValidationIssue]:
+        excluded = {w.lower() for w in ctx.horizontal_exclude_words if w}
+        if not excluded:
+            return []
+
+        issues: list[ValidationIssue] = []
+        for idx, row in enumerate(ctx.grid_rows):
+            word = _norm(row)
+            if word in excluded:
+                issues.append(
+                    ValidationIssue(
+                        code="horizontal_exclude_word_in_grid",
+                        level="error",
+                        message=f"grid row {idx} is excluded: {word}",
+                        details={"row_index": idx, "word": word},
+                    )
+                )
+
+        valid_words = ctx.completed_payload.get("valid_words") or {}
+        rows_section = valid_words.get("rows") or {}
+        for bucket in ("lr", "rl"):
+            for word in rows_section.get(bucket) or []:
+                norm_word = _norm(word)
+                if norm_word in excluded:
+                    issues.append(
+                        ValidationIssue(
+                            code="horizontal_exclude_word_in_valid_words",
+                            level="error",
+                            message=f"valid_words.rows.{bucket} contains excluded word: {norm_word}",
+                            details={"bucket": bucket, "word": norm_word},
+                        )
+                    )
         return issues
 
 
@@ -402,6 +446,103 @@ class MadnessConsistencyRule:
                         details={"missing": missing},
                     )
                 )
+        return issues
+
+
+class MadnessPathRule:
+    name = "madness_path"
+
+    def validate(self, ctx: PuzzleValidationContext) -> list[ValidationIssue]:
+        meta = ctx.meta
+        if meta.get("madnessAvailable") is not True:
+            return []
+
+        word = _norm(meta.get("madnessWord"))
+        path = meta.get("madnessPath")
+        if not word or path is None:
+            return []
+
+        issues: list[ValidationIssue] = []
+        if word not in {"margana", "anagram"}:
+            issues.append(
+                ValidationIssue(
+                    code="madness_word_invalid",
+                    level="error",
+                    message=f"madnessWord must be 'margana' or 'anagram', got '{word}'",
+                    details={"madnessWord": word},
+                )
+            )
+
+        coords = _normalize_madness_path(path)
+        if coords is None:
+            return [
+                ValidationIssue(
+                    code="madness_path_invalid_shape",
+                    level="error",
+                    message="madnessPath must be a list of [row, col] pairs or {'r','c'} objects",
+                    details={"madnessPath": path},
+                )
+            ] + issues
+
+        if len(coords) != len(word):
+            issues.append(
+                ValidationIssue(
+                    code="madness_path_length_mismatch",
+                    level="error",
+                    message=f"madnessPath length {len(coords)} does not match madnessWord length {len(word)}",
+                    details={"madnessWord": word, "madnessPath": path},
+                )
+            )
+
+        rows = ctx.grid_rows
+        seen: set[tuple[int, int]] = set()
+        extracted_letters: list[str] = []
+        for idx, (row_idx, col_idx) in enumerate(coords):
+            if not (0 <= row_idx < len(rows)) or not rows or not (0 <= col_idx < len(rows[row_idx])):
+                issues.append(
+                    ValidationIssue(
+                        code="madness_path_out_of_bounds",
+                        level="error",
+                        message=f"madnessPath coordinate {idx} is out of bounds",
+                        details={"index": idx, "coordinate": [row_idx, col_idx]},
+                    )
+                )
+                continue
+            if (row_idx, col_idx) in seen:
+                issues.append(
+                    ValidationIssue(
+                        code="madness_path_reuses_cell",
+                        level="error",
+                        message=f"madnessPath reuses cell at index {idx}",
+                        details={"index": idx, "coordinate": [row_idx, col_idx]},
+                    )
+                )
+            seen.add((row_idx, col_idx))
+            extracted_letters.append(rows[row_idx][col_idx].lower())
+
+        for idx in range(1, len(coords)):
+            prev_r, prev_c = coords[idx - 1]
+            cur_r, cur_c = coords[idx]
+            if max(abs(cur_r - prev_r), abs(cur_c - prev_c)) != 1:
+                issues.append(
+                    ValidationIssue(
+                        code="madness_path_not_touching",
+                        level="error",
+                        message=f"madnessPath coordinates at {idx - 1} and {idx} are not touching",
+                        details={"from": [prev_r, prev_c], "to": [cur_r, cur_c]},
+                    )
+                )
+
+        if extracted_letters and "".join(extracted_letters) != word:
+            issues.append(
+                ValidationIssue(
+                    code="madness_path_word_mismatch",
+                    level="error",
+                    message="letters extracted from madnessPath do not match madnessWord",
+                    details={"madnessWord": word, "pathLetters": "".join(extracted_letters)},
+                )
+            )
+
         return issues
 
 
@@ -650,6 +791,49 @@ class BonusAlwaysZeroRule:
         return issues
 
 
+class DifficultyBandConsistencyRule:
+    name = "difficulty_band_consistency"
+
+    def validate(self, ctx: PuzzleValidationContext) -> list[ValidationIssue]:
+        meta = ctx.meta
+        applied = _norm(meta.get("difficultyBandApplied"))
+        if not applied:
+            return []
+
+        if meta.get("madnessAvailable") is True:
+            if applied != "skipped":
+                return [
+                    ValidationIssue(
+                        code="difficulty_band_mismatch",
+                        level="error",
+                        message=f"madness puzzle should use difficultyBandApplied='skipped', got '{applied}'",
+                        details={"difficultyBandApplied": applied, "total_score": ctx.total_score},
+                    )
+                ]
+            return []
+
+        expected = band_for_total_score(ctx.total_score)
+        if expected is None:
+            return [
+                ValidationIssue(
+                    code="difficulty_band_unclassifiable",
+                    level="error",
+                    message=f"could not classify total_score {ctx.total_score} into a difficulty band",
+                    details={"total_score": ctx.total_score},
+                )
+            ]
+        if applied != expected:
+            return [
+                ValidationIssue(
+                    code="difficulty_band_mismatch",
+                    level="error",
+                    message=f"difficultyBandApplied '{applied}' does not match total_score band '{expected}'",
+                    details={"difficultyBandApplied": applied, "expected": expected, "total_score": ctx.total_score},
+                )
+            ]
+        return []
+
+
 class TotalScoreRule:
     name = "total_score"
 
@@ -703,3 +887,24 @@ def _int_or_none(value: Any) -> int | None:
         return int(value)
     except Exception:
         return None
+
+
+def _normalize_madness_path(path: Any) -> list[tuple[int, int]] | None:
+    if not isinstance(path, list):
+        return None
+    coords: list[tuple[int, int]] = []
+    for step in path:
+        row_idx: int | None
+        col_idx: int | None
+        if isinstance(step, dict):
+            row_idx = _int_or_none(step.get("r"))
+            col_idx = _int_or_none(step.get("c"))
+        elif isinstance(step, (list, tuple)) and len(step) == 2:
+            row_idx = _int_or_none(step[0])
+            col_idx = _int_or_none(step[1])
+        else:
+            return None
+        if row_idx is None or col_idx is None:
+            return None
+        coords.append((row_idx, col_idx))
+    return coords

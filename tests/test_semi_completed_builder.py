@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from margana_gen.semi_completed_builder import build_semi_completed_payload, mask_grid_rows
+from margana_gen.semi_completed_builder import (
+    build_semi_completed_payload,
+    mask_grid_rows,
+    shuffle_word_deterministic,
+)
 
 
 def test_mask_grid_rows_reveals_only_target_column_and_diagonal():
@@ -47,3 +51,12 @@ def test_build_semi_completed_payload_preserves_expected_shape():
         "madnessAvailable": False,
         "difficultyBandApplied": "hard",
     }
+
+
+def test_shuffle_word_deterministic_is_stable_and_not_equal_when_possible():
+    shuffled_once = shuffle_word_deterministic("boardwalks", "layout|2026-04-01|boardwalks")
+    shuffled_twice = shuffle_word_deterministic("boardwalks", "layout|2026-04-01|boardwalks")
+
+    assert shuffled_once == shuffled_twice
+    assert sorted(shuffled_once) == sorted("boardwalks")
+    assert shuffled_once != "boardwalks"

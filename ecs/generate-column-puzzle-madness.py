@@ -33,25 +33,41 @@ from margana_gen.s3_utils import (
     download_word_list_from_s3,
 )
 from margana_gen import column_logic
+from margana_gen.generator_bootstrap import (
+    ensure_words_file,
+    load_horizontal_exclude_words,
+    load_usage_log_with_optional_s3_sync,
+    save_usage_log_with_optional_s3_sync,
+)
+from margana_gen.generator_difficulty import DIFFICULTY_BANDS
+from margana_gen.completed_payload_builder import build_completed_payload
+from margana_gen.generator_resources import (
+    WORDLIST_S3_KEY_DEFAULT,
+    load_letter_scores,
+    resolve_generator_resource_paths,
+)
+from margana_gen.generator_scoring import make_score_word
+from margana_gen.payload_io import write_payload_pair
 from margana_gen.semi_completed_builder import build_semi_completed_payload
+from margana_gen.valid_word_items_builder import build_valid_word_items
+from margana_gen.valid_words_builder import build_valid_words_map
+from margana_gen.valid_words_metadata_builder import (
+    build_valid_words_metadata,
+    enrich_valid_words_metadata,
+)
 from margana_score import remove_pre_loaded_words
 
 SCRIPT_PATH = Path(__file__).resolve()
-PYTHON_ROOT = SCRIPT_PATH.parents[1]
-RESOURCES_DIR = PYTHON_ROOT.resolve()
-WORD_LIST_DEFAULT = RESOURCES_DIR / "margana-word-list.txt"
-WORDLIST_HORIZONTAL_EXCLUDE = RESOURCES_DIR / "horizontal-exclude-words.txt"
-USAGE_LOG_FILE = (RESOURCES_DIR / "margana-puzzle-usage-log2.json").resolve()
-WORDLIST_S3_KEY_DEFAULT = "word-lists/margana-word-list.txt"
+RESOURCE_PATHS = resolve_generator_resource_paths(
+    script_path=SCRIPT_PATH,
+    usage_log_filename="margana-puzzle-usage-log2.json",
+)
+RESOURCES_DIR = RESOURCE_PATHS.resources_dir
+WORD_LIST_DEFAULT = RESOURCE_PATHS.word_list_default
+WORDLIST_HORIZONTAL_EXCLUDE = RESOURCE_PATHS.horizontal_exclude_words
+USAGE_LOG_FILE = RESOURCE_PATHS.usage_log_file
 USAGE_S3_KEY_DEFAULT = "usage-logs/margana-puzzle-usage-log2.json"
 
-# Difficulty thresholds (copied from main generator)
-DIFFICULTY_BANDS = {
-    "easy":   {"min_score": 167, "max_score": 176},
-    "medium": {"min_score": 177, "max_score": 196},
-    "hard":   {"min_score": 197, "max_score": 206},
-    "xtream": {"min_score": 207, "max_score": None},
-}
 ANAGRAM_LEN_DEFAULTS = {"min": 7, "max": 10}
 
 # Debug
@@ -143,20 +159,8 @@ def _find_adjacent_word_path(grid_rows: List[str], word: str) -> Optional[List[T
 
 # ---- Utilities largely mirrored from the main generator ----
 
-def _load_letter_scores() -> dict:
-    try:
-        with open(RESOURCES_DIR / "letter-scores-v3.json", "r", encoding="utf-8") as sf:
-            ls = json.load(sf)
-    except Exception:
-        ls = {}
-    return {str(k).lower(): int(v) for k, v in ls.items() if isinstance(v, (int, float))}
-
-LETTER_SCORES = _load_letter_scores()
-
-def _score_word(w: str) -> int:
-    if not w:
-        return 0
-    return sum(int(LETTER_SCORES.get(ch, 0)) for ch in str(w).lower())
+LETTER_SCORES = load_letter_scores(RESOURCE_PATHS.letter_scores_file)
+_score_word = make_score_word(LETTER_SCORES)
 
 def choose_rows_for_column_and_diag(
     target_col: str,
@@ -179,18 +183,10 @@ def choose_rows_for_column_and_diag(
 
 def load_horizontal_exclude_set() -> set[str]:
     exclude_path = Path(WORDLIST_HORIZONTAL_EXCLUDE)
-    horizontal_exclude_set: set[str] = set()
-
+    horizontal_exclude_set = load_horizontal_exclude_words(exclude_path)
     if not exclude_path.exists():
         dbg(f"horizontal exclude file not found at {exclude_path}; continuing with no excludes")
         return horizontal_exclude_set
-
-    for line in exclude_path.read_text(encoding="utf-8").splitlines():
-        w = line.strip().lower()
-        if not w or w.startswith("#"):
-            continue
-        if w.isalpha() and len(w) == 5:
-            horizontal_exclude_set.add(w)
 
     dbg(f"loaded {len(horizontal_exclude_set)} horizontal exclude words from {exclude_path}")
     return horizontal_exclude_set
@@ -620,12 +616,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--debug-verbose", action="store_true")
 
     # Difficulty gating (same as main)
-    p.add_argument("--difficulty", type=str, default=None, choices=["easy","medium","hard","xtream","random"])
+    p.add_argument("--difficulty", type=str, default=None, choices=["easy","medium","hard","random"])
     p.add_argument("--min-total-score", type=int, default=None)
     p.add_argument("--max-total-score", type=int, default=None)
     p.add_argument("--min-anagram-len", type=int, default=ANAGRAM_LEN_DEFAULTS["min"])
     p.add_argument("--max-anagram-len", type=int, default=ANAGRAM_LEN_DEFAULTS["max"])
-    p.add_argument("--difficulty-random-weights", type=str, default="easy=3,medium=4,hard=2,xtream=1")
+    p.add_argument("--difficulty-random-weights", type=str, default="easy=2,medium=4,hard=3")
     p.add_argument("--difficulty-random-no-repeat", action="store_true")
     p.add_argument("--difficulty-random-salt", type=str, default="")
 
@@ -677,22 +673,13 @@ def main():
     s3_word_bucket = f"margana-word-game-{args.environment}"
 
     # Ensure words file
-    words_path = Path(args.words_file).resolve()
-    if not words_path.exists():
-        if not args.no_s3_usage:
-            dbg(f"words file missing; downloading from s3://{s3_word_bucket}/{WORDLIST_S3_KEY_DEFAULT}")
-            etag_path = words_path.with_suffix(".etag")
-            ok = download_word_list_from_s3(
-                bucket=s3_word_bucket,
-                key=WORDLIST_S3_KEY_DEFAULT,
-                dest_path=str(words_path),
-                etag_cache_path=str(etag_path),
-                use_cache=True,
-            )
-            if not ok or not words_path.exists():
-                raise FileNotFoundError("Word list not found and S3 download failed")
-        else:
-            raise FileNotFoundError(f"Word list not found at {words_path}")
+    words_path = ensure_words_file(
+        words_path=Path(args.words_file),
+        bucket=s3_word_bucket,
+        key=WORDLIST_S3_KEY_DEFAULT,
+        allow_s3_download=not args.no_s3_usage,
+        logger=dbg,
+    )
 
     words_by_len, _all = load_words(str(words_path))
     words5 = words_by_len.get(5, [])
@@ -704,9 +691,13 @@ def main():
     diag_words_set = set(combined_diag_words)
 
     # Usage log
-    if not args.no_s3_usage:
-        download_usage_log_from_s3(bucket=s3_word_bucket, key=args.usage_s3_key, dest_path=USAGE_LOG_FILE)
-    usage_log = load_usage_log(USAGE_LOG_FILE)
+    usage_log = load_usage_log_with_optional_s3_sync(
+        bucket=s3_word_bucket,
+        key=args.usage_s3_key,
+        usage_log_path=USAGE_LOG_FILE,
+        sync_from_s3=not args.no_s3_usage,
+        logger=dbg,
+    )
     column_log = usage_log.setdefault("column_puzzle", {"puzzles": {}})
 
     # Helper: date from args
@@ -781,81 +772,13 @@ def main():
 
         # Difficulty gating: compute exact payload-style total (mirror main behavior)
         # Build metadata items similar to the main generator
-        ws5 = set(words5)
-        items: List[dict] = []
-        # rows lr & rl
-        rows_lr = [r for r in rows]
-        rows_rl = [r[::-1] for r in rows_lr]
-        for i, w in enumerate(rows_lr):
-            if w in ws5:
-                items.append({"word": w, "type": "row", "index": i, "direction": "lr"})
-        for i, w in enumerate(rows_rl):
-            if w in ws5 and w != rows_lr[i]:
-                items.append({"word": w, "type": "row", "index": i, "direction": "rl"})
-        # columns tb/bt
-        cols_tb: List[str] = []
-        cols_bt: List[str] = []
-        for cidx in range(5):
-            col_str = "".join(rows[r][cidx] for r in range(5))
-            cols_tb.append(col_str)
-            cols_bt.append(col_str[::-1])
-        for j, w in enumerate(cols_tb):
-            if w in ws5:
-                items.append({"word": w, "type": "column", "index": j, "direction": "tb"})
-        for j, w in enumerate(cols_bt):
-            if w in ws5 and w != cols_tb[j]:
-                items.append({"word": w, "type": "column", "index": j, "direction": "bt"})
-        # diagonals edge-to-edge substrings 2..5, both dirs
-        def on_edge(r: int, c: int) -> bool:
-            return r == 0 or c == 0 or r == 4 or c == 4
-        # build paths
-        main_paths: List[List[Tuple[int,int]]] = []
-        anti_paths: List[List[Tuple[int,int]]] = []
-        # main
-        for c0 in range(5):
-            path=[]; r=0; c=c0
-            while r<5 and c<5:
-                path.append((r,c)); r+=1; c+=1
-            if len(path)>=2: main_paths.append(path)
-        for r0 in range(1,5):
-            path=[]; r=r0; c=0
-            while r<5 and c<5:
-                path.append((r,c)); r+=1; c+=1
-            if len(path)>=2: main_paths.append(path)
-        # anti
-        for c0 in range(4,-1,-1):
-            path=[]; r=0; c=c0
-            while r<5 and c>=0:
-                path.append((r,c)); r+=1; c-=1
-            if len(path)>=2: anti_paths.append(path)
-        for r0 in range(1,5):
-            path=[]; r=r0; c=4
-            while r<5 and c>=0:
-                path.append((r,c)); r+=1; c-=1
-            if len(path)>=2: anti_paths.append(path)
-        allowed_lengths = {2,3,4,5}
-        def add_diag(paths: List[List[Tuple[int,int]]], fdir: str, rdir: str):
-            for path in paths:
-                letters = "".join(rows[r][c] for r,c in path)
-                L = len(path)
-                for i in range(L):
-                    for j in range(i+1, L):
-                        seg_len = j - i + 1
-                        if seg_len not in allowed_lengths:
-                            continue
-                        (sr,sc) = path[i]; (er,ec) = path[j]
-                        if not (on_edge(sr,sc) and on_edge(er,ec)):
-                            continue
-                        wf = letters[i:j+1]
-                        wr = wf[::-1]
-                        if wf in diag_words_set:
-                            items.append({"word": wf, "type": "diagonal", "index": 0, "direction": fdir,
-                                           "start_index": {"r": sr, "c": sc}, "end_index": {"r": er, "c": ec}})
-                        if wr in diag_words_set:
-                            items.append({"word": wr, "type": "diagonal", "index": 0, "direction": rdir,
-                                           "start_index": {"r": er, "c": ec}, "end_index": {"r": sr, "c": sc}})
-        add_diag(main_paths, "main", "main_rev")
-        add_diag(anti_paths, "anti", "anti_rev")
+        items = build_valid_word_items(
+            grid_rows=rows,
+            words5=words5,
+            diagonal_words=diag_words_set,
+            diagonal_lengths={2, 3, 4, 5},
+            include_coordinates=True,
+        )
 
         # The below code was removed in place of using the shared lib remove_pre_loaded_words
         # This was due to the current code allowing for a vt or dt to be included in the valid_words_metadata
@@ -878,14 +801,25 @@ def main():
         # add top anagram once
         if longest_one:
             items.append({"word": longest_one, "type": "anagram", "index": 0, "direction": "builder"})
-        # compute total like main (palindromes double; anagram not doubled)
-        total_exact = 0
-        for it in items:
-            w = str(it.get("word") or "")
-            typ = it.get("type")
-            base = _score_word(w)
-            is_pal = (typ != "anagram") and (w == w[::-1] and len(w) > 0)
-            total_exact += base * 2 if is_pal else base
+
+        candidate_valid_words_metadata = build_valid_words_metadata(items)
+
+        exclusion_meta = {
+            "wordLength": 5,
+            "columnIndex": col,
+            "diagonalDirection": diag_dir,
+            "verticalTargetWord": target,
+            "diagonalTargetWord": diag,
+        }
+        candidate_valid_words_metadata = remove_pre_loaded_words(exclusion_meta, candidate_valid_words_metadata)
+
+        enrich_valid_words_metadata(
+            candidate_valid_words_metadata,
+            letter_scores=LETTER_SCORES,
+            score_word=_score_word,
+        )
+        lambda_total_score = sum(int(it.get("score") or 0) for it in candidate_valid_words_metadata)
+        valid_words_map = build_valid_words_map(candidate_valid_words_metadata, combined_diag_words)
 
         # Resolve difficulty band thresholds
         band_min = args.min_total_score
@@ -901,7 +835,7 @@ def main():
                 seed_key = f"{today_iso}|{args.difficulty_random_salt}"
                 rnd = random.Random(seed_key)
                 # parse weights
-                weights = {"easy":3,"medium":4,"hard":2,"xtream":1}
+                weights = {"easy":2,"medium":4,"hard":3}
                 try:
                     for part in str(args.difficulty_random_weights or '').split(','):
                         if not part.strip():
@@ -909,9 +843,9 @@ def main():
                         k,v = part.split('='); weights[k.strip()] = int(v.strip())
                 except Exception:
                     pass
-                pool = ["easy"]*int(weights.get("easy",0)) + ["medium"]*int(weights.get("medium",0)) + ["hard"]*int(weights.get("hard",0)) + ["xtream"]*int(weights.get("xtream",0))
+                pool = ["easy"]*int(weights.get("easy",0)) + ["medium"]*int(weights.get("medium",0)) + ["hard"]*int(weights.get("hard",0))
                 if not pool:
-                    pool = ["easy","medium","hard","xtream"]
+                    pool = ["easy","medium","hard"]
                 pick = rnd.choice(pool)
                 if bool(args.difficulty_random_no_repeat):
                     try:
@@ -938,11 +872,11 @@ def main():
             dbg(f"reject: anagram length {len(longest_one)} outside [{args.min_anagram_len},{args.max_anagram_len}] -> retry")
             continue
         # Score band gate
-        if band_min is not None and total_exact < int(band_min):
-            dbg(f"reject: payload_total {total_exact} < min_total_score {band_min} -> retry")
+        if band_min is not None and lambda_total_score < int(band_min):
+            dbg(f"reject: payload_total {lambda_total_score} < min_total_score {band_min} -> retry")
             continue
-        if band_max is not None and total_exact > int(band_max):
-            dbg(f"reject: payload_total {total_exact} > max_total_score {band_max} -> retry")
+        if band_max is not None and lambda_total_score > int(band_max):
+            dbg(f"reject: payload_total {lambda_total_score} > max_total_score {band_max} -> retry")
             continue
 
         # Madness detection (surprise day): when path-first builder is used, we already have the path
@@ -984,86 +918,7 @@ def main():
         layout_id = _column_layout_id(target, col, diag_dir, diag)
 
         # Build completed and semi payloads (mirror main generator where possible)
-        # Build valid_words map from items (dedup by bucket)
-        words_set_for_map = set(combined_diag_words)
-        valid_words_map = {
-            "rows": {"lr": [], "rl": []},
-            "columns": {"tb": [], "bt": []},
-            "diagonals": {"main": [], "main_rev": [], "anti": [], "anti_rev": []},
-            "anagram": [],
-        }
-        seen_map = {
-            "rows": {"lr": set(), "rl": set()},
-            "columns": {"tb": set(), "bt": set()},
-            "diagonals": {"main": set(), "main_rev": set(), "anti": set(), "anti_rev": set()},
-            "anagram": set(),
-        }
-        for it in items:
-            w = (it.get("word") or "").lower(); typ = it.get("type"); direction = it.get("direction")
-            if not w or w not in words_set_for_map:
-                continue
-            if typ == "row":
-                bucket = "lr" if direction == "lr" else ("rl" if direction == "rl" else None)
-                if bucket:
-                    valid_words_map["rows"][bucket].append(w)
-            elif typ == "column":
-                bucket = "tb" if direction == "tb" else ("bt" if direction == "bt" else None)
-                if bucket and w not in seen_map["columns"][bucket]:
-                    valid_words_map["columns"][bucket].append(w); seen_map["columns"][bucket].add(w)
-            elif typ == "diagonal":
-                if direction in ("main","main_rev","anti","anti_rev") and w not in seen_map["diagonals"][direction]:
-                    valid_words_map["diagonals"][direction].append(w); seen_map["diagonals"][direction].add(w)
-            elif typ == "anagram":
-                if w not in seen_map["anagram"]:
-                    valid_words_map["anagram"].append(w); seen_map["anagram"].add(w)
-
-        # Build valid_words_metadata including per-word score info
-        valid_words_metadata: List[dict] = []
-        letter_scores = LETTER_SCORES
-        def add_item_meta(word: str, typ: str, direction: str, start=None, end=None):
-            base = _score_word(word)
-            is_pal = (typ != "anagram") and (word == word[::-1] and len(word) > 0)
-            meta = {
-                "word": word,
-                "type": typ,
-                "index": 0,
-                "direction": direction,
-                "start_index": start,
-                "end_index": end,
-                "palindrome": bool(is_pal),
-                "semordnilap": False,
-                "letter_value": {ch: int(letter_scores.get(ch,0)) for ch in set(word.lower()) if ch},
-                "letters": [ch for ch in word.lower()],
-                "letter_scores": [int(letter_scores.get(ch,0)) for ch in word.lower()],
-                "letter_sum": int(base),
-                "base_score": int(base * 2 if is_pal else base),
-                "bonus": 0,
-                "score": int(base * 2 if is_pal else base),
-            }
-            valid_words_metadata.append(meta)
-
-        # Populate metadata from items
-        for it in items:
-            w = str(it.get("word") or ""); typ = it.get("type"); direction = it.get("direction")
-            start = it.get("start_index"); end = it.get("end_index")
-            add_item_meta(w, typ, direction, start, end)
-
-        # The below code was removed in place of using the shared lib remove_pre_loaded_words
-        # This was due to the current code allowing for a vt or dt to be included in the valid_words_metadata
-        # when it was read backwards.
-        #
-        # Remove target words
-        # if vt or dt:
-        #     valid_words_metadata = [it for it in valid_words_metadata if (it.get("word") or "").lower() not in {vt, dt}]
-
-        exclusion_meta = {
-            "wordLength": 5,
-            "columnIndex": col,
-            "diagonalDirection": diag_dir,
-            "verticalTargetWord": target,
-            "diagonalTargetWord": diag,
-        }
-        valid_words_metadata = remove_pre_loaded_words(exclusion_meta, valid_words_metadata)
+        valid_words_metadata = candidate_valid_words_metadata
 
     # Append an explicit madness item (score=0) in completed payload only
         madnessBonus = None
@@ -1076,9 +931,6 @@ def main():
             else:
                 # sum of letter scores for the detected word
                 madnessBonus = _score_word(madnessWord or "margana")
-
-        # Compute total score from metadata (like main)
-        lambda_total_score = sum(int(it.get("score") or 0) for it in valid_words_metadata)
 
         # saved_at
         def _saved_at_from_args() -> str:
@@ -1094,44 +946,27 @@ def main():
         saved_at_str = _saved_at_from_args()
 
         # Compose completed_doc
-        completed_doc = {
-            "saved_at": saved_at_str,
-            "user": {"sub": "margana", "username": "margana", "email": None, "issuer": "generator", "identity_provider": None},
-            "diagonal_direction": diag_dir,
-            "diagonal_target_word": diag,
-            "meta": {
-                "date": today_iso,
-                "rows": 5,
-                "cols": 5,
-                "wordLength": 5,
-                "columnIndex": col,
-                "diagonalDirection": diag_dir,
-                "verticalTargetWord": target if target else None,
-                "diagonalTargetWord": diag if diag else None,
-                "longestAnagram": (longest_one if longest_one else None),
-                "longestAnagramCount": int(len(longest_one)) if longest_one else 0,
-                "userAnagram": None,
-                # Madness flags for completed payload
+        completed_doc = build_completed_payload(
+            saved_at=saved_at_str,
+            date=today_iso,
+            vertical_target_word=target,
+            column_index=col,
+            diagonal_direction=diag_dir,
+            diagonal_target_word=diag,
+            rows=rows,
+            longest_anagram=longest_one,
+            valid_words=valid_words_map,
+            valid_words_metadata=valid_words_metadata,
+            total_score=lambda_total_score,
+            meta_extra={
                 "madnessAvailable": bool(madnessAvailable),
                 "madnessBonus": int(madnessBonus) if madnessAvailable and madnessBonus is not None else 0,
                 "madnessWord": madnessWord if madnessAvailable else None,
                 "madnessDirection": madnessDirection if madnessAvailable else None,
             },
-            "grid_rows": rows,
-            "valid_words": valid_words_map,
-            "valid_words_metadata": valid_words_metadata,
-            "total_score": lambda_total_score,
-        }
+        )
         if madnessAvailable and madnessPath_list is not None:
             completed_doc["meta"]["madnessPath"] = madnessPath_list
-
-        # Save completed
-        completed_path = RESOURCES_DIR / "margana-completed.json"
-        try:
-            with open(completed_path, "w", encoding="utf-8") as cf:
-                json.dump(completed_doc, cf, indent=2)
-        except Exception as e:
-            print(f"Warning: failed to write {completed_path}: {e}")
 
         semi_output = build_semi_completed_payload(
             date=today_iso,
@@ -1149,17 +984,25 @@ def main():
                 "madnessBonus": int(madnessBonus) if madnessAvailable and madnessBonus is not None else 0,
             },
         )
+        completed_path = RESOURCES_DIR / "margana-completed.json"
         semi_path = RESOURCES_DIR / "margana-semi-completed.json"
         try:
-            with open(semi_path, "w", encoding="utf-8") as sf:
-                json.dump(semi_output, sf, indent=2)
+            completed_path, semi_path = write_payload_pair(
+                RESOURCES_DIR,
+                completed_payload=completed_doc,
+                semi_completed_payload=semi_output,
+            )
         except Exception as e:
             print(f"Warning: failed to write {semi_path}: {e}")
 
         # Save usage log
-        save_usage_log(usage_log, USAGE_LOG_FILE)
-        if not args.no_s3_usage:
-            upload_usage_log_to_s3(bucket=s3_word_bucket, key=args.usage_s3_key, src_path=USAGE_LOG_FILE)
+        save_usage_log_with_optional_s3_sync(
+            usage_log=usage_log,
+            usage_log_path=USAGE_LOG_FILE,
+            bucket=s3_word_bucket,
+            key=args.usage_s3_key,
+            sync_to_s3=not args.no_s3_usage,
+        )
 
         # Optional upload paired payloads
         if args.upload_puzzle:

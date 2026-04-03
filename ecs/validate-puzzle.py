@@ -15,6 +15,21 @@ def _load_payload(path_str: str) -> dict:
         return json.load(fh)
 
 
+def _load_word_set(path_str: str | None) -> set[str]:
+    if not path_str:
+        return set()
+    path = Path(path_str).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Horizontal exclude file not found: {path}")
+    words: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        word = line.strip().lower()
+        if not word or word.startswith("#"):
+            continue
+        words.add(word)
+    return words
+
+
 def _discover_payload_sets(payload_dir: str) -> list[tuple[Path, Path | None]]:
     base = Path(payload_dir).resolve()
     if base.is_file():
@@ -50,6 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--min-anagram-len", type=int, default=8, help="Minimum allowed longest-anagram length.")
     parser.add_argument("--max-anagram-len", type=int, default=10, help="Maximum allowed longest-anagram length.")
+    parser.add_argument("--horizontal-exclude-file", default=None, help="Optional path to horizontal-exclude-words.txt")
     parser.add_argument("--fail-on-warning", action="store_true", help="Return non-zero if warnings are present.")
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument("--verbose", action="store_true", help="Print every validation issue for every payload.")
@@ -61,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     payload_sets = _discover_payload_sets(args.payload_dir)
+    horizontal_exclude_words = _load_word_set(args.horizontal_exclude_file)
     rules = rules_for_preset(
         args.preset,
         min_anagram_len=int(args.min_anagram_len),
@@ -78,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         ctx = PuzzleValidationContext(
             completed_payload=completed_payload,
             semi_completed_payload=semi_completed_payload,
+            horizontal_exclude_words=horizontal_exclude_words,
         )
         contexts.append(ctx)
         result = run_validations(ctx, rules)

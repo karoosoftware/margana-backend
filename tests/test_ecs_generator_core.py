@@ -5,6 +5,9 @@ import random
 from pathlib import Path
 import pytest
 import json
+from datetime import date
+
+from margana_gen.usage_log import puzzle_in_cooldown
 
 def _load_module(filename: str):
     mod_path = Path(__file__).resolve().parents[1] / "ecs" / filename
@@ -187,3 +190,123 @@ def test_madness_build_puzzle_with_path(mad_mod, monkeypatch):
             max_column_tries=1,
             max_diag_tries=1
         )
+
+
+def test_pick_difficulty_band_for_date_uses_weights(gen_mod):
+    pick = gen_mod._pick_difficulty_band_for_date(
+        "2026-04-01",
+        difficulty="random",
+        difficulty_random_weights="easy=0,medium=0,hard=1",
+        difficulty_random_salt="",
+        difficulty_random_no_repeat=False,
+    )
+    assert pick == "hard"
+
+
+def test_pick_difficulty_band_for_date_no_repeat_changes_previous(gen_mod):
+    previous_day = "2026-03-31"
+    current_day = "2026-04-01"
+    weights = "easy=1,medium=1,hard=0"
+
+    previous_pick = gen_mod._pick_difficulty_band_for_date(
+        previous_day,
+        difficulty="random",
+        difficulty_random_weights=weights,
+        difficulty_random_salt="",
+        difficulty_random_no_repeat=False,
+    )
+    repeated_pick = gen_mod._pick_difficulty_band_for_date(
+        current_day,
+        difficulty="random",
+        difficulty_random_weights=weights,
+        difficulty_random_salt="",
+        difficulty_random_no_repeat=False,
+    )
+    no_repeat_pick = gen_mod._pick_difficulty_band_for_date(
+        current_day,
+        difficulty="random",
+        difficulty_random_weights=weights,
+        difficulty_random_salt="",
+        difficulty_random_no_repeat=True,
+    )
+
+    assert previous_pick == repeated_pick
+    assert no_repeat_pick in {"easy", "medium"}
+    assert no_repeat_pick != previous_pick
+
+
+def test_format_batch_day_diagnostics(gen_mod):
+    line = gen_mod._format_batch_day_diagnostics(
+        day_iso="2026-04-03",
+        band="hard",
+        madness=False,
+        written=False,
+        total_score=None,
+        anagram_length=None,
+        attempts_used=200,
+        max_attempts=200,
+        rejection_counts={
+            "builder_exception": 12,
+            "timeout": 1,
+            "anagram_length": 4,
+            "score_below_band": 150,
+            "score_above_band": 20,
+            "usage_log_cooldown": 13,
+        },
+    )
+
+    assert "BATCH_DAY date=2026-04-03" in line
+    assert "band=hard" in line
+    assert "written=False" in line
+    assert "total_score=none" in line
+    assert "anagram_length=none" in line
+    assert "attempts=200/200" in line
+    assert "score_below_band=150" in line
+    assert "usage_log_cooldown=13" in line
+
+
+def test_column_puzzle_id_can_be_checked_against_usage_log_cooldown(gen_mod):
+    puzzle_id = gen_mod._column_puzzle_id(
+        "harks",
+        3,
+        "anti",
+        "tarns",
+        ["wight", "kayak", "myrrh", "snaky", "shush"],
+    )
+    level_log = {"puzzles": {puzzle_id: date.today().isoformat()}}
+
+    assert puzzle_in_cooldown(level_log, puzzle_id, cooldown_days=365) is True
+
+
+def test_batch_day_diagnostics_can_show_usage_log_cooldown_for_known_puzzle(gen_mod):
+    puzzle_id = gen_mod._column_puzzle_id(
+        "harks",
+        3,
+        "anti",
+        "tarns",
+        ["wight", "kayak", "myrrh", "snaky", "shush"],
+    )
+    level_log = {"puzzles": {puzzle_id: date.today().isoformat()}}
+
+    assert puzzle_in_cooldown(level_log, puzzle_id, cooldown_days=365) is True
+
+    line = gen_mod._format_batch_day_diagnostics(
+        day_iso="2026-03-07",
+        band="hard",
+        madness=False,
+        written=False,
+        total_score=None,
+        anagram_length=None,
+        attempts_used=1,
+        max_attempts=800,
+        rejection_counts={
+            "builder_exception": 0,
+            "timeout": 0,
+            "anagram_length": 0,
+            "score_below_band": 0,
+            "score_above_band": 0,
+            "usage_log_cooldown": 1,
+        },
+    )
+
+    assert "usage_log_cooldown=1" in line

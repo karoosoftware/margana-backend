@@ -79,6 +79,27 @@ def test_validate_puzzle_cli_rejects_invalid_payload(tmp_path):
     assert exit_code == 1
 
 
+def test_validate_puzzle_cli_rejects_horizontal_exclude_words(tmp_path):
+    cli = _load_cli_module()
+    completed = tmp_path / "margana-completed.json"
+    exclude = tmp_path / "horizontal-exclude-words.txt"
+    _write_json(
+        completed,
+        {
+            "meta": {"rows": 5, "cols": 5, "wordLength": 5},
+            "grid_rows": ["views", "vodka", "lager", "queue", "furze"],
+            "valid_words": {"rows": {"lr": ["views", "vodka", "lager", "queue", "furze"], "rl": []}},
+            "valid_words_metadata": [],
+            "total_score": 0,
+        },
+    )
+    exclude.write_text("views\n", encoding="utf-8")
+
+    exit_code = cli.main(["--payload-dir", str(tmp_path), "--horizontal-exclude-file", str(exclude)])
+
+    assert exit_code == 1
+
+
 def test_validate_puzzle_cli_verbose_prints_issue_details(tmp_path, capsys):
     cli = _load_cli_module()
     completed = tmp_path / "margana-completed.json"

@@ -25,9 +25,7 @@
     "madnessWord": null,
     "madnessDirection": null,
     "madnessPath": null,
-    "madnessScore": null,
-    "difficultyBandType": "random",
-    "difficultyBandApplied": "xtream"
+    "madnessScore": null
   },
   "grid_rows": [
     "auras",

@@ -4,6 +4,8 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
 from margana_gen.validation import (
     FixedTargetExclusionRule,
     PuzzleValidationContext,
@@ -118,6 +120,77 @@ def test_default_validations_reject_non_zero_bonus():
     assert "non_zero_bonus" in [issue.code for issue in result.issues]
 
 
+def test_default_validations_reject_difficulty_band_mismatch_for_non_madness_payload():
+    payload = {
+        "meta": {
+            "rows": 5,
+            "cols": 5,
+            "wordLength": 5,
+            "columnIndex": 0,
+            "diagonalDirection": "main",
+            "verticalTargetWord": "abcde",
+            "diagonalTargetWord": "abcde",
+            "longestAnagram": "abcdefgh",
+            "longestAnagramCount": 8,
+            "madnessAvailable": False,
+            "difficultyBandApplied": "xtream",
+        },
+        "vertical_target_word": "abcde",
+        "diagonal_target_word": "abcde",
+        "diagonal_direction": "main",
+        "grid_rows": ["axxxx", "bxxxx", "cxxxx", "dxxxx", "exxxx"],
+        "valid_words": {"rows": {"lr": ["axxxx", "bxxxx", "cxxxx", "dxxxx", "exxxx"], "rl": []}},
+        "valid_words_metadata": [
+            {"word": "xxxxx", "type": "row", "index": 0, "direction": "lr", "base_score": 170, "bonus": 0, "score": 170}
+        ],
+        "total_score": 170,
+    }
+
+    result = run_validations(PuzzleValidationContext(completed_payload=payload), default_rules())
+
+    assert not result.ok
+    assert "difficulty_band_mismatch" in [issue.code for issue in result.issues]
+
+
+def test_default_validations_accept_skipped_difficulty_band_for_madness_payload():
+    payload = _load_payload("tests/fixtures/payloads/sample-madness-completed.json")
+
+    result = run_validations(PuzzleValidationContext(completed_payload=payload), default_rules())
+
+    assert result.ok, [issue.code for issue in result.issues]
+
+
+@pytest.mark.parametrize(
+    ("total_score", "expected_band"),
+    [
+        (160, "easy"),
+        (170, "easy"),
+        (179, "easy"),
+        (180, "medium"),
+        (190, "medium"),
+        (199, "medium"),
+        (200, "hard"),
+        (220, "hard"),
+        (260, "hard"),
+    ],
+)
+def test_default_validations_accept_all_non_madness_difficulty_bands(total_score, expected_band):
+    payload = {
+        "meta": {
+            "madnessAvailable": False,
+            "difficultyBandApplied": expected_band,
+        },
+        "total_score": total_score,
+    }
+
+    result = run_validations(
+        PuzzleValidationContext(completed_payload=payload),
+        [rule for rule in default_rules() if rule.name == "difficulty_band_consistency"],
+    )
+
+    assert result.ok, [issue.code for issue in result.issues]
+
+
 def test_default_validations_reject_grid_with_wrong_row_count():
     payload = {
         "meta": {"rows": 4, "cols": 5, "wordLength": 5},
@@ -163,6 +236,31 @@ def test_default_validations_reject_valid_words_rows_lr_mismatch():
 
     assert not result.ok
     assert "valid_words_rows_lr_mismatch" in [issue.code for issue in result.issues]
+
+
+def test_default_validations_reject_horizontal_exclude_word_in_grid_and_valid_words():
+    payload = {
+        "meta": {"rows": 5, "cols": 5, "wordLength": 5},
+        "grid_rows": ["views", "vodka", "lager", "queue", "furze"],
+        "valid_words": {
+            "rows": {
+                "lr": ["views", "vodka", "lager", "queue", "furze"],
+                "rl": ["regal"],
+            }
+        },
+        "valid_words_metadata": [],
+        "total_score": 0,
+    }
+
+    result = run_validations(
+        PuzzleValidationContext(completed_payload=payload, horizontal_exclude_words={"views", "regal"}),
+        default_rules(),
+    )
+
+    assert not result.ok
+    codes = [issue.code for issue in result.issues]
+    assert "horizontal_exclude_word_in_grid" in codes
+    assert "horizontal_exclude_word_in_valid_words" in codes
 
 
 def test_default_validations_accept_duplicate_rows_when_lr_matches_grid_rows():
@@ -253,6 +351,39 @@ def test_default_validations_reject_missing_madness_fields_when_available():
 
     assert not result.ok
     assert "madness_fields_missing_when_available" in [issue.code for issue in result.issues]
+
+
+def test_default_validations_accept_valid_madness_path():
+    payload = _load_payload("tests/fixtures/payloads/sample-madness-completed.json")
+
+    result = run_validations(PuzzleValidationContext(completed_payload=payload), default_rules())
+
+    assert result.ok, [issue.code for issue in result.issues]
+
+
+def test_default_validations_reject_non_touching_madness_path():
+    payload = _load_payload("tests/fixtures/payloads/sample-madness-completed.json")
+    broken = deepcopy(payload)
+    broken["meta"] = dict(broken["meta"])
+    broken["meta"]["madnessPath"] = list(broken["meta"]["madnessPath"])
+    broken["meta"]["madnessPath"][1] = [0, 4]
+
+    result = run_validations(PuzzleValidationContext(completed_payload=broken), default_rules())
+
+    assert not result.ok
+    assert "madness_path_not_touching" in [issue.code for issue in result.issues]
+
+
+def test_default_validations_reject_madness_path_word_mismatch():
+    payload = _load_payload("tests/fixtures/payloads/sample-madness-completed.json")
+    broken = deepcopy(payload)
+    broken["meta"] = dict(broken["meta"])
+    broken["meta"]["madnessWord"] = "anagram"
+
+    result = run_validations(PuzzleValidationContext(completed_payload=broken), default_rules())
+
+    assert not result.ok
+    assert "madness_path_word_mismatch" in [issue.code for issue in result.issues]
 
 
 def test_default_validations_reject_semi_completed_mismatch():

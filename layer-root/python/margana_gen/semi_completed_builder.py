@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from typing import Any
 
 
@@ -45,3 +46,17 @@ def build_semi_completed_payload(
     if extra_fields:
         payload.update(extra_fields)
     return payload
+
+
+def shuffle_word_deterministic(word: str, seed_key: str) -> str:
+    if not word:
+        return ""
+    rnd = random.Random(seed_key)
+    arr = list(word)
+    for i in range(len(arr) - 1, 0, -1):
+        j = rnd.randrange(0, i + 1)
+        arr[i], arr[j] = arr[j], arr[i]
+    shuffled = "".join(arr)
+    if shuffled == word and len(word) > 1:
+        shuffled = word[1:] + word[0]
+    return shuffled
