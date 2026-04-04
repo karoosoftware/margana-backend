@@ -66,6 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-anagram-len", type=int, default=8, help="Minimum allowed longest-anagram length.")
     parser.add_argument("--max-anagram-len", type=int, default=10, help="Maximum allowed longest-anagram length.")
     parser.add_argument("--horizontal-exclude-file", default=None, help="Optional path to horizontal-exclude-words.txt")
+    parser.add_argument("--anagram-exclude-file", default=None, help="Optional path to anagram-exclude-words.txt")
     parser.add_argument("--fail-on-warning", action="store_true", help="Return non-zero if warnings are present.")
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument("--verbose", action="store_true", help="Print every validation issue for every payload.")
@@ -78,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     payload_sets = _discover_payload_sets(args.payload_dir)
     horizontal_exclude_words = _load_word_set(args.horizontal_exclude_file)
+    anagram_exclude_words = _load_word_set(args.anagram_exclude_file)
     rules = rules_for_preset(
         args.preset,
         min_anagram_len=int(args.min_anagram_len),
@@ -96,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
             completed_payload=completed_payload,
             semi_completed_payload=semi_completed_payload,
             horizontal_exclude_words=horizontal_exclude_words,
+            anagram_exclude_words=anagram_exclude_words,
         )
         contexts.append(ctx)
         result = run_validations(ctx, rules)

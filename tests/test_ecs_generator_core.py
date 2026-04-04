@@ -248,6 +248,7 @@ def test_format_batch_day_diagnostics(gen_mod):
         rejection_counts={
             "builder_exception": 12,
             "timeout": 1,
+            "anagram_excluded": 2,
             "anagram_length": 4,
             "score_below_band": 150,
             "score_above_band": 20,
@@ -261,6 +262,7 @@ def test_format_batch_day_diagnostics(gen_mod):
     assert "total_score=none" in line
     assert "anagram_length=none" in line
     assert "attempts=200/200" in line
+    assert "anagram_excluded=2" in line
     assert "score_below_band=150" in line
     assert "usage_log_cooldown=13" in line
 
@@ -302,6 +304,7 @@ def test_batch_day_diagnostics_can_show_usage_log_cooldown_for_known_puzzle(gen_
         rejection_counts={
             "builder_exception": 0,
             "timeout": 0,
+            "anagram_excluded": 0,
             "anagram_length": 0,
             "score_below_band": 0,
             "score_above_band": 0,

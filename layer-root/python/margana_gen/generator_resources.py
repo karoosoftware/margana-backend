@@ -13,6 +13,7 @@ class GeneratorResourcePaths:
     resources_dir: Path
     word_list_default: Path
     horizontal_exclude_words: Path
+    anagram_exclude_words: Path
     letter_scores_file: Path
     usage_log_file: Path
 
@@ -23,6 +24,7 @@ def resolve_generator_resource_paths(*, script_path: Path, usage_log_filename: s
         resources_dir=resources_dir,
         word_list_default=resources_dir / "margana-word-list.txt",
         horizontal_exclude_words=resources_dir / "horizontal-exclude-words.txt",
+        anagram_exclude_words=resources_dir / "anagram-exclude-words.txt",
         letter_scores_file=resources_dir / "letter-scores-v3.json",
         usage_log_file=(resources_dir / usage_log_filename).resolve(),
     )

@@ -34,6 +34,7 @@ class PuzzleValidationContext:
     semi_completed_payload: dict[str, Any] | None = None
     letter_scores: dict[str, int] = field(default_factory=dict)
     horizontal_exclude_words: set[str] = field(default_factory=set)
+    anagram_exclude_words: set[str] = field(default_factory=set)
 
     @property
     def meta(self) -> dict[str, Any]:
@@ -117,6 +118,7 @@ def default_rules(*, min_anagram_len: int = 8, max_anagram_len: int = 10) -> lis
         ColumnTargetRule(),
         DiagonalTargetRule(),
         AnagramLengthRule(min_len=min_anagram_len, max_len=max_anagram_len),
+        AnagramExcludeRule(),
         AnagramMetadataConsistencyRule(),
         AnagramLetterInventoryRule(),
         MadnessConsistencyRule(),
@@ -279,6 +281,28 @@ class HorizontalExcludeRule:
                         )
                     )
         return issues
+
+
+class AnagramExcludeRule:
+    name = "anagram_exclude"
+
+    def validate(self, ctx: PuzzleValidationContext) -> list[ValidationIssue]:
+        excluded = {w.lower() for w in ctx.anagram_exclude_words if w}
+        if not excluded:
+            return []
+
+        longest = _norm(ctx.meta.get("longestAnagram") or ctx.meta.get("longest_anagram"))
+        if not longest or longest not in excluded:
+            return []
+
+        return [
+            ValidationIssue(
+                code="excluded_anagram_selected",
+                level="error",
+                message=f"longestAnagram is excluded: {longest}",
+                details={"word": longest},
+            )
+        ]
 
 
 class TopLevelTargetConsistencyRule:

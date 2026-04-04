@@ -36,6 +36,7 @@ from margana_gen.s3_utils import download_usage_log_from_s3, upload_usage_log_to
 from margana_gen import column_logic
 from margana_gen.generator_bootstrap import (
     ensure_words_file,
+    load_anagram_exclude_words,
     load_horizontal_exclude_words,
     load_usage_log_with_optional_s3_sync,
     save_usage_log_with_optional_s3_sync,
@@ -83,6 +84,7 @@ RESOURCE_PATHS = resolve_generator_resource_paths(
 RESOURCES_DIR = RESOURCE_PATHS.resources_dir
 WORD_LIST_DEFAULT = RESOURCE_PATHS.word_list_default
 WORDLIST_HORIZONTAL_EXCLUDE = RESOURCE_PATHS.horizontal_exclude_words
+WORDLIST_ANAGRAM_EXCLUDE = RESOURCE_PATHS.anagram_exclude_words
 USAGE_LOG_FILE = RESOURCE_PATHS.usage_log_file
 USAGE_S3_KEY_DEFAULT = "usage-logs/margana-puzzle-usage-log.json"
 
@@ -178,6 +180,7 @@ def _format_batch_day_diagnostics(
     ordered_keys = [
         "builder_exception",
         "timeout",
+        "anagram_excluded",
         "anagram_length",
         "score_below_band",
         "score_above_band",
@@ -327,6 +330,16 @@ def load_horizontal_exclude_set() -> set[str]:
     dbg(f"loaded {len(horizontal_exclude_set)} horizontal exclude words from {exclude_path}")
     return horizontal_exclude_set
 
+
+def load_anagram_exclude_set() -> set[str]:
+    exclude_path = Path(WORDLIST_ANAGRAM_EXCLUDE)
+    anagram_exclude_set = load_anagram_exclude_words(exclude_path)
+    if not exclude_path.exists():
+        dbg(f"anagram exclude file not found at {exclude_path}; continuing with no excludes")
+        return anagram_exclude_set
+    dbg(f"loaded {len(anagram_exclude_set)} anagram exclude words from {exclude_path}")
+    return anagram_exclude_set
+
 def choose_rows_for_column_and_diag(
         target_col: str,
         column: int,
@@ -464,6 +477,7 @@ def main():
     words5 = words_by_len.get(5, [])
 
     horizontal_exclude_set = load_horizontal_exclude_set()
+    anagram_exclude_set = load_anagram_exclude_set()
 
     dbg(f"loaded words: len2={len(words_by_len.get(2, []))} len3={len(words_by_len.get(3, []))} len4={len(words_by_len.get(4, []))} len5={len(words5)}")
     # Also prepare combined dictionary for diagonal edge-to-edge detection (3-5 letters)
@@ -849,6 +863,7 @@ def main():
             rejection_counts = {
                 "builder_exception": 0,
                 "timeout": 0,
+                "anagram_excluded": 0,
                 "anagram_length": 0,
                 "score_below_band": 0,
                 "score_above_band": 0,
@@ -935,7 +950,10 @@ def main():
                 anagram_pool_try = "".join(rows)
                 longest_candidates_try = longest_constructible_words(anagram_pool_try, _all)
                 rows_set_try = set(rows)
-                longest_candidates_try = [w for w in longest_candidates_try if w not in rows_set_try]
+                longest_candidates_try = [
+                    w for w in longest_candidates_try
+                    if w not in rows_set_try and w not in anagram_exclude_set
+                ]
 
                 def _pick_longest_upto10_try(cands: List[str]) -> str:
                     cands = [w for w in cands if len(w) <= 10]
@@ -949,13 +967,23 @@ def main():
                 longest_one_try = _pick_longest_upto10_try(longest_candidates_try)
                 if not longest_one_try:
                     all_constructible_try = constructible_words_min_length(anagram_pool_try, _all, 1)
-                    upto10_try = [w for w in all_constructible_try if len(w) <= 10 and w not in rows_set_try]
+                    upto10_unfiltered_try = [
+                        w for w in all_constructible_try
+                        if len(w) <= 10 and w not in rows_set_try
+                    ]
+                    upto10_try = [
+                        w for w in upto10_unfiltered_try
+                        if w not in anagram_exclude_set
+                    ]
                     if upto10_try:
                         max_len = max(len(w) for w in upto10_try)
                         pool = [w for w in upto10_try if len(w) == max_len]
                         rng.shuffle(pool)
                         longest_one_try = pool[0]
                     else:
+                        if upto10_unfiltered_try:
+                            rejection_counts["anagram_excluded"] += 1
+                            continue
                         longest_one_try = ""
 
                 _letter_scores_local = LETTER_SCORES
@@ -1495,7 +1523,10 @@ def main():
         anagram_pool_try = "".join(rows)
         longest_candidates_try = longest_constructible_words(anagram_pool_try, _all)
         rows_set_try = set(rows)
-        longest_candidates_try = [w for w in longest_candidates_try if w not in rows_set_try]
+        longest_candidates_try = [
+            w for w in longest_candidates_try
+            if w not in rows_set_try and w not in anagram_exclude_set
+        ]
 
         def _pick_longest_upto10_try(cands: List[str]) -> str:
             cands = [w for w in cands if len(w) <= 10]
@@ -1509,7 +1540,10 @@ def main():
         longest_one_try = _pick_longest_upto10_try(longest_candidates_try)
         if not longest_one_try:
             all_constructible_try = constructible_words_min_length(anagram_pool_try, _all, 1)
-            upto10_try = [w for w in all_constructible_try if len(w) <= 10 and w not in rows_set_try]
+            upto10_try = [
+                w for w in all_constructible_try
+                if len(w) <= 10 and w not in rows_set_try and w not in anagram_exclude_set
+            ]
             if upto10_try:
                 max_len = max(len(w) for w in upto10_try)
                 pool = [w for w in upto10_try if len(w) == max_len]

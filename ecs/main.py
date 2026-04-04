@@ -111,17 +111,21 @@ def download_static_assets(
     word_list_key: str,
     horizontal_exclude_key: str,
     letter_scores_key: str,
+    anagram_exclude_key: str | None = None,
 ) -> dict[str, str]:
     base_dir = Path(assets_dir).resolve()
     paths = {
         "word_list": str(base_dir / "margana-word-list.txt"),
         "horizontal_exclude": str(base_dir / "horizontal-exclude-words.txt"),
         "letter_scores": str(base_dir / "letter-scores-v3.json"),
+        "anagram_exclude": str(base_dir / "anagram-exclude-words.txt"),
     }
 
     download_s3_object_to_file(bucket_name, word_list_key, paths["word_list"], region_name)
     download_s3_object_to_file(bucket_name, horizontal_exclude_key, paths["horizontal_exclude"], region_name)
     download_s3_object_to_file(bucket_name, letter_scores_key, paths["letter_scores"], region_name)
+    if anagram_exclude_key and s3_object_exists(bucket_name, anagram_exclude_key, region_name):
+        download_s3_object_to_file(bucket_name, anagram_exclude_key, paths["anagram_exclude"], region_name)
 
     return paths
 
@@ -134,10 +138,13 @@ def stage_assets_for_generator(downloaded_assets: dict[str, str], target_root: s
         "word_list": str(root / "margana-word-list.txt"),
         "horizontal_exclude": str(root / "horizontal-exclude-words.txt"),
         "letter_scores": str(root / "letter-scores-v3.json"),
+        "anagram_exclude": str(root / "anagram-exclude-words.txt"),
     }
     shutil.copyfile(downloaded_assets["word_list"], staged["word_list"])
     shutil.copyfile(downloaded_assets["horizontal_exclude"], staged["horizontal_exclude"])
     shutil.copyfile(downloaded_assets["letter_scores"], staged["letter_scores"])
+    if Path(downloaded_assets["anagram_exclude"]).exists():
+        shutil.copyfile(downloaded_assets["anagram_exclude"], staged["anagram_exclude"])
     return staged
 
 
@@ -352,6 +359,12 @@ def main(argv: list[str] | None = None) -> None:
         help="S3 key for the letter scores file.",
     )
     parser.add_argument(
+        "--anagram-exclude-key",
+        type=str,
+        default=os.environ.get("ANAGRAM_EXCLUDE_KEY", "anagram-exclude-words.txt"),
+        help="Optional S3 key for the anagram exclude words file.",
+    )
+    parser.add_argument(
         "--assets-dir",
         type=str,
         default=os.environ.get("ASSETS_DIR", DEFAULT_ASSETS_DIR),
@@ -428,6 +441,7 @@ def main(argv: list[str] | None = None) -> None:
             word_list_key=args.word_list_key,
             horizontal_exclude_key=args.horizontal_exclude_key,
             letter_scores_key=args.letter_scores_key,
+            anagram_exclude_key=args.anagram_exclude_key,
         )
         print("Static assets downloaded successfully.")
         print(downloaded)
@@ -476,6 +490,7 @@ def main(argv: list[str] | None = None) -> None:
         word_list_key=args.word_list_key,
         horizontal_exclude_key=args.horizontal_exclude_key,
         letter_scores_key=args.letter_scores_key,
+        anagram_exclude_key=args.anagram_exclude_key,
     )
     staged = stage_assets_for_generator(downloaded, str(Path(__file__).resolve().parents[1]))
     print("Static assets staged locally for the container.")
@@ -520,13 +535,17 @@ def main(argv: list[str] | None = None) -> None:
     if args.use_s3_path_layout:
         generator_args.append("--use-s3-path-layout")
 
+    validator_args = ["--summary-only", "--horizontal-exclude-file", staged["horizontal_exclude"]]
+    if Path(staged["anagram_exclude"]).exists():
+        validator_args.extend(["--anagram-exclude-file", staged["anagram_exclude"]])
+
     # Stage 4: run the generator first, then the standalone validator over the generated
     # payload directory. The wrapper keeps these as separate processes so validation can be
     # rerun independently when needed.
     config = GeneratorWrapperConfig(
         payload_dir=Path(args.output_root),
         generator_args=generator_args,
-        validator_args=["--summary-only", "--horizontal-exclude-file", staged["horizontal_exclude"]],
+        validator_args=validator_args,
     )
     generator_result, validator_result = run_generation_pipeline(config, cwd=Path(__file__).resolve().parents[1])
     if generator_result.returncode != 0:

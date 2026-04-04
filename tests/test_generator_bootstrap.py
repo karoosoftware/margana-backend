@@ -15,6 +15,15 @@ def test_load_horizontal_exclude_words_filters_comments_and_non_five_letter_word
     assert result == {"views", "queue"}
 
 
+def test_load_anagram_exclude_words_filters_to_eight_to_ten_letter_words(tmp_path):
+    exclude_file = tmp_path / "anagram-exclude-words.txt"
+    exclude_file.write_text("# comment\nnightmare\nstaplers\nalphabetic\nqueue\n", encoding="utf-8")
+
+    result = generator_bootstrap.load_anagram_exclude_words(exclude_file)
+
+    assert result == {"nightmare", "staplers", "alphabetic"}
+
+
 def test_ensure_words_file_returns_existing_local_path(tmp_path):
     words_file = tmp_path / "margana-word-list.txt"
     words_file.write_text("alpha\n", encoding="utf-8")

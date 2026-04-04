@@ -263,6 +263,33 @@ def test_default_validations_reject_horizontal_exclude_word_in_grid_and_valid_wo
     assert "horizontal_exclude_word_in_valid_words" in codes
 
 
+def test_default_validations_reject_excluded_longest_anagram():
+    payload = {
+        "meta": {
+            "rows": 5,
+            "cols": 5,
+            "wordLength": 5,
+            "columnIndex": 0,
+            "diagonalDirection": "main",
+            "verticalTargetWord": "abcde",
+            "diagonalTargetWord": "abcde",
+            "longestAnagram": "nightmare",
+            "longestAnagramCount": 9,
+        },
+        "grid_rows": ["abcde", "fghij", "klmno", "pqrst", "uvwxy"],
+        "valid_words_metadata": [],
+        "total_score": 0,
+    }
+
+    result = run_validations(
+        PuzzleValidationContext(completed_payload=payload, anagram_exclude_words={"nightmare"}),
+        default_rules(),
+    )
+
+    assert not result.ok
+    assert "excluded_anagram_selected" in [issue.code for issue in result.issues]
+
+
 def test_default_validations_accept_duplicate_rows_when_lr_matches_grid_rows():
     payload = {
         "meta": {"rows": 5, "cols": 5, "wordLength": 5},

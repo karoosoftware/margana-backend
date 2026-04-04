@@ -7,7 +7,7 @@ from margana_gen.s3_utils import download_usage_log_from_s3, download_word_list_
 from margana_gen.usage_log import load_usage_log, save_usage_log
 
 
-def load_horizontal_exclude_words(path: Path) -> set[str]:
+def load_word_exclude_words(path: Path, *, min_len: int, max_len: int) -> set[str]:
     words: set[str] = set()
     if not path.exists():
         return words
@@ -15,9 +15,17 @@ def load_horizontal_exclude_words(path: Path) -> set[str]:
         word = line.strip().lower()
         if not word or word.startswith("#"):
             continue
-        if word.isalpha() and len(word) == 5:
+        if word.isalpha() and min_len <= len(word) <= max_len:
             words.add(word)
     return words
+
+
+def load_horizontal_exclude_words(path: Path) -> set[str]:
+    return load_word_exclude_words(path, min_len=5, max_len=5)
+
+
+def load_anagram_exclude_words(path: Path) -> set[str]:
+    return load_word_exclude_words(path, min_len=8, max_len=10)
 
 
 def ensure_words_file(

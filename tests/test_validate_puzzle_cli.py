@@ -100,6 +100,36 @@ def test_validate_puzzle_cli_rejects_horizontal_exclude_words(tmp_path):
     assert exit_code == 1
 
 
+def test_validate_puzzle_cli_rejects_excluded_anagram_words(tmp_path):
+    cli = _load_cli_module()
+    completed = tmp_path / "margana-completed.json"
+    exclude = tmp_path / "anagram-exclude-words.txt"
+    _write_json(
+        completed,
+        {
+            "meta": {
+                "rows": 5,
+                "cols": 5,
+                "wordLength": 5,
+                "columnIndex": 0,
+                "diagonalDirection": "main",
+                "verticalTargetWord": "abcde",
+                "diagonalTargetWord": "abcde",
+                "longestAnagram": "nightmare",
+                "longestAnagramCount": 9,
+            },
+            "grid_rows": ["abcde", "fghij", "klmno", "pqrst", "uvwxy"],
+            "valid_words_metadata": [],
+            "total_score": 0,
+        },
+    )
+    exclude.write_text("nightmare\n", encoding="utf-8")
+
+    exit_code = cli.main(["--payload-dir", str(tmp_path), "--anagram-exclude-file", str(exclude)])
+
+    assert exit_code == 1
+
+
 def test_validate_puzzle_cli_verbose_prints_issue_details(tmp_path, capsys):
     cli = _load_cli_module()
     completed = tmp_path / "margana-completed.json"

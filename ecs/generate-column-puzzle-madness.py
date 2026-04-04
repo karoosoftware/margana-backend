@@ -35,6 +35,7 @@ from margana_gen.s3_utils import (
 from margana_gen import column_logic
 from margana_gen.generator_bootstrap import (
     ensure_words_file,
+    load_anagram_exclude_words,
     load_horizontal_exclude_words,
     load_usage_log_with_optional_s3_sync,
     save_usage_log_with_optional_s3_sync,
@@ -65,6 +66,7 @@ RESOURCE_PATHS = resolve_generator_resource_paths(
 RESOURCES_DIR = RESOURCE_PATHS.resources_dir
 WORD_LIST_DEFAULT = RESOURCE_PATHS.word_list_default
 WORDLIST_HORIZONTAL_EXCLUDE = RESOURCE_PATHS.horizontal_exclude_words
+WORDLIST_ANAGRAM_EXCLUDE = RESOURCE_PATHS.anagram_exclude_words
 USAGE_LOG_FILE = RESOURCE_PATHS.usage_log_file
 USAGE_S3_KEY_DEFAULT = "usage-logs/margana-puzzle-usage-log2.json"
 
@@ -190,6 +192,17 @@ def load_horizontal_exclude_set() -> set[str]:
 
     dbg(f"loaded {len(horizontal_exclude_set)} horizontal exclude words from {exclude_path}")
     return horizontal_exclude_set
+
+
+def load_anagram_exclude_set() -> set[str]:
+    exclude_path = Path(WORDLIST_ANAGRAM_EXCLUDE)
+    anagram_exclude_set = load_anagram_exclude_words(exclude_path)
+    if not exclude_path.exists():
+        dbg(f"anagram exclude file not found at {exclude_path}; continuing with no excludes")
+        return anagram_exclude_set
+
+    dbg(f"loaded {len(anagram_exclude_set)} anagram exclude words from {exclude_path}")
+    return anagram_exclude_set
 
 def build_puzzle(
     words5: List[str],
@@ -684,6 +697,7 @@ def main():
     words_by_len, _all = load_words(str(words_path))
     words5 = words_by_len.get(5, [])
     horizontal_exclude_set = load_horizontal_exclude_set()
+    anagram_exclude_set = load_anagram_exclude_set()
     words2 = words_by_len.get(2, [])
     words3 = words_by_len.get(3, [])
     words4 = words_by_len.get(4, [])
@@ -753,7 +767,10 @@ def main():
         anagram_pool_try = "".join(rows)
         rows_set_try = set(rows)
         longest_candidates_try = longest_constructible_words(anagram_pool_try, _all)
-        longest_candidates_try = [w for w in longest_candidates_try if w not in rows_set_try and len(w) <= 10]
+        longest_candidates_try = [
+            w for w in longest_candidates_try
+            if w not in rows_set_try and len(w) <= 10 and w not in anagram_exclude_set
+        ]
         if longest_candidates_try:
             max_len = max(len(w) for w in longest_candidates_try)
             pool = [w for w in longest_candidates_try if len(w) == max_len]
@@ -761,7 +778,10 @@ def main():
             longest_one = pool[0]
         else:
             all_constructible_try = constructible_words_min_length(anagram_pool_try, _all, 1)
-            upto10 = [w for w in all_constructible_try if len(w) <= 10 and w not in rows_set_try]
+            upto10 = [
+                w for w in all_constructible_try
+                if len(w) <= 10 and w not in rows_set_try and w not in anagram_exclude_set
+            ]
             if upto10:
                 max_len = max(len(w) for w in upto10)
                 pool = [w for w in upto10 if len(w) == max_len]
