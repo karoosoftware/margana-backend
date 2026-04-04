@@ -148,6 +148,7 @@ def test_main_runs_generation_pipeline_for_target_week(tmp_path, monkeypatch, ca
             (bucket_name, object_key, destination_path, region_name)
         ),
     )
+    monkeypatch.setattr(ecs_main, "existing_week_payload_keys_in_s3", lambda **kwargs: [])
     monkeypatch.setattr(
         ecs_main,
         "upload_file_to_s3",
@@ -192,6 +193,8 @@ def test_main_runs_generation_pipeline_for_target_week(tmp_path, monkeypatch, ca
     assert usage_downloads[0][0] == "margana-word-game-preprod"
     assert usage_downloads[0][1] == "usage-logs/margana-puzzle-usage-log.json"
     assert usage_uploads[0][1] == "margana-word-game-preprod"
+    payload_uploads = [call for call in usage_uploads if call[1] == "margana-word-game-preprod" and str(call[2]).startswith("public/daily-puzzles/")]
+    assert len(payload_uploads) == 7
     assert "Task completed successfully." in out
 
 
@@ -220,6 +223,7 @@ def test_main_print_payloads_outputs_generated_json(tmp_path, monkeypatch, capsy
     )
     monkeypatch.setattr(ecs_main, "download_s3_object_to_file", lambda *args, **kwargs: None)
     monkeypatch.setattr(ecs_main, "upload_file_to_s3", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ecs_main, "existing_week_payload_keys_in_s3", lambda **kwargs: [])
     monkeypatch.setattr(
         ecs_main,
         "run_generation_pipeline",
@@ -268,6 +272,7 @@ def test_main_print_payload_summary_outputs_compact_lines(tmp_path, monkeypatch,
     )
     monkeypatch.setattr(ecs_main, "download_s3_object_to_file", lambda *args, **kwargs: None)
     monkeypatch.setattr(ecs_main, "upload_file_to_s3", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ecs_main, "existing_week_payload_keys_in_s3", lambda **kwargs: [])
     monkeypatch.setattr(
         ecs_main,
         "run_generation_pipeline",
@@ -314,6 +319,7 @@ def test_main_fails_when_target_week_is_incomplete(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(ecs_main, "download_s3_object_to_file", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ecs_main, "existing_week_payload_keys_in_s3", lambda **kwargs: [])
     upload_calls = []
     monkeypatch.setattr(ecs_main, "upload_file_to_s3", lambda *args, **kwargs: upload_calls.append(args))
     monkeypatch.setattr(
@@ -332,3 +338,20 @@ def test_main_fails_when_target_week_is_incomplete(tmp_path, monkeypatch):
         assert exc.code == 1
 
     assert upload_calls == []
+
+
+def test_main_fails_when_week_already_exists_in_s3(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        ecs_main,
+        "existing_week_payload_keys_in_s3",
+        lambda **kwargs: [
+            "public/daily-puzzles/2026/03/30/margana-completed.json",
+            "public/daily-puzzles/2026/03/30/margana-semi-completed.json",
+        ],
+    )
+
+    try:
+        ecs_main.main(["--target-week", "2026-14", "--output-root", str(tmp_path / "payloads")])
+        assert False, "Expected SystemExit when target week already exists in S3"
+    except SystemExit as exc:
+        assert exc.code == 1

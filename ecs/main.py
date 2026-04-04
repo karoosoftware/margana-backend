@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import sys
+from datetime import date
 from pathlib import Path
 
 from ecs.generator_wrapper import GeneratorWrapperConfig, run_generation_pipeline
@@ -144,6 +145,10 @@ def usage_log_bucket_for_environment(environment: str) -> str:
     return f"margana-word-game-{environment}"
 
 
+def dates_for_iso_week(year: int, iso_week: int) -> list[date]:
+    return [date.fromisocalendar(year, iso_week, day) for day in range(1, 8)]
+
+
 def parse_target_week(target_week: str) -> tuple[int, int]:
     try:
         year_str, week_str = str(target_week).split("-", 1)
@@ -174,6 +179,74 @@ def print_payload_summaries(payload_root: Path) -> None:
 
 def count_completed_payloads(payload_root: Path) -> int:
     return sum(1 for _ in payload_root.rglob("margana-completed.json"))
+
+
+def expected_s3_payload_keys_for_week(*, year: int, iso_week: int, prefix: str) -> list[str]:
+    keys: list[str] = []
+    normalized_prefix = prefix.strip("/")
+    for day in dates_for_iso_week(year, iso_week):
+        day_prefix = f"{normalized_prefix}/{day.year:04d}/{day.month:02d}/{day.day:02d}"
+        keys.append(f"{day_prefix}/margana-completed.json")
+        keys.append(f"{day_prefix}/margana-semi-completed.json")
+    return keys
+
+
+def s3_object_exists(bucket_name: str, object_key: str, region_name: str | None) -> bool:
+    import boto3
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    s3 = boto3.client("s3", region_name=region_name)
+    try:
+        s3.head_object(Bucket=bucket_name, Key=object_key)
+        return True
+    except ClientError as exc:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            return False
+        raise
+    except BotoCoreError:
+        raise
+
+
+def week_payloads_exist_in_s3(*, bucket_name: str, region_name: str | None, year: int, iso_week: int, prefix: str) -> bool:
+    for object_key in expected_s3_payload_keys_for_week(year=year, iso_week=iso_week, prefix=prefix):
+        if s3_object_exists(bucket_name, object_key, region_name):
+            return True
+    return False
+
+
+def existing_week_payload_keys_in_s3(
+    *,
+    bucket_name: str,
+    region_name: str | None,
+    year: int,
+    iso_week: int,
+    prefix: str,
+) -> list[str]:
+    existing_keys: list[str] = []
+    for object_key in expected_s3_payload_keys_for_week(year=year, iso_week=iso_week, prefix=prefix):
+        if s3_object_exists(bucket_name, object_key, region_name):
+            existing_keys.append(object_key)
+    return existing_keys
+
+
+def upload_payload_directory_to_s3(*, payload_root: Path, bucket_name: str, region_name: str | None, prefix: str) -> int:
+    source_root = payload_root / prefix.strip("/")
+    if not source_root.exists():
+        raise FileNotFoundError(f"Payload source directory not found: {source_root}")
+
+    uploaded = 0
+    for payload_path in sorted(source_root.rglob("*.json")):
+        relative_key = payload_path.relative_to(payload_root).as_posix()
+        upload_file_to_s3(
+            str(payload_path),
+            bucket_name,
+            relative_key,
+            region_name,
+            content_type="application/json",
+        )
+        uploaded += 1
+    return uploaded
 
 
 def send_ses_email(
@@ -230,6 +303,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--max-usage-tries", type=int, default=int(os.environ.get("MAX_USAGE_TRIES", "200")))
     parser.add_argument("--cooldown-days", type=int, default=int(os.environ.get("COOLDOWN_DAYS", "1826")))
     parser.add_argument("--use-s3-path-layout", action="store_true", default=True)
+    parser.add_argument(
+        "--payload-bucket",
+        type=str,
+        default=os.environ.get("PAYLOAD_BUCKET"),
+        help="Override S3 bucket for puzzle payload upload/check. Defaults to margana-word-game-<environment>.",
+    )
+    parser.add_argument(
+        "--payload-prefix",
+        type=str,
+        default=os.environ.get("PAYLOAD_PREFIX", "public/daily-puzzles"),
+        help="S3 prefix used for generated puzzle payloads.",
+    )
     parser.add_argument(
         "--s3-bucket",
         type=str,
@@ -360,7 +445,29 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("--target-week is required unless using a utility mode like --smoke-test")
 
     year, iso_week = parse_target_week(args.target_week)
+    payload_bucket = args.payload_bucket or usage_log_bucket_for_environment(str(args.environment))
 
+    # Stage 1: fail fast if this target week is already present in S3, unless the caller
+    # explicitly forces regeneration. This avoids overwriting or duplicating published weeks.
+    existing_payload_keys: list[str] = []
+    if not args.force:
+        existing_payload_keys = existing_week_payload_keys_in_s3(
+            bucket_name=payload_bucket,
+            region_name=args.aws_region,
+            year=year,
+            iso_week=iso_week,
+            prefix=args.payload_prefix,
+        )
+    if existing_payload_keys:
+        existing_keys_text = "\n".join(f"  - s3://{payload_bucket}/{key}" for key in existing_payload_keys)
+        print(
+            f"Puzzle payloads already exist for ISO week {args.target_week}:\n{existing_keys_text}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    # Stage 2: download the static generation inputs from S3 and stage them into the repo
+    # root inside the container so the existing generator scripts can use local file paths.
     print(f"Starting Margana Puzzle Generator Task for week: {args.target_week}")
     downloaded = download_static_assets(
         bucket_name=args.static_assets_bucket,
@@ -374,6 +481,8 @@ def main(argv: list[str] | None = None) -> None:
     print("Static assets staged locally for the container.")
     print(staged)
 
+    # Stage 3: fetch the mutable usage log locally. The generator updates this file during
+    # generation, but we keep S3 writes outside the generator so publish stays gated on validation.
     usage_log_bucket = args.usage_log_bucket or usage_log_bucket_for_environment(str(args.environment))
     usage_log_path = str(Path(__file__).resolve().parents[1] / "margana-puzzle-usage-log.json")
     download_s3_object_to_file(
@@ -411,6 +520,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.use_s3_path_layout:
         generator_args.append("--use-s3-path-layout")
 
+    # Stage 4: run the generator first, then the standalone validator over the generated
+    # payload directory. The wrapper keeps these as separate processes so validation can be
+    # rerun independently when needed.
     config = GeneratorWrapperConfig(
         payload_dir=Path(args.output_root),
         generator_args=generator_args,
@@ -424,6 +536,8 @@ def main(argv: list[str] | None = None) -> None:
     if validator_result.returncode != 0:
         raise SystemExit(validator_result.returncode)
 
+    # Stage 5: require a complete ISO week before publishing anything. Validation only checks
+    # payloads that exist, so this guards against partial weeks slipping through as success.
     completed_payloads = count_completed_payloads(Path(args.output_root))
     if completed_payloads != 7:
         print(
@@ -432,6 +546,8 @@ def main(argv: list[str] | None = None) -> None:
         )
         raise SystemExit(1)
 
+    # Stage 6: publish the updated usage log and validated payload files back to S3.
+    # This only happens after generation and validation have both succeeded.
     upload_file_to_s3(
         usage_log_path,
         usage_log_bucket,
@@ -439,6 +555,14 @@ def main(argv: list[str] | None = None) -> None:
         args.aws_region,
         content_type="application/json",
     )
+
+    uploaded_payloads = upload_payload_directory_to_s3(
+        payload_root=Path(args.output_root),
+        bucket_name=payload_bucket,
+        region_name=args.aws_region,
+        prefix=args.payload_prefix,
+    )
+    print(f"Uploaded {uploaded_payloads} payload files to s3://{payload_bucket}/{args.payload_prefix}")
 
     if args.print_payload_summary:
         print_payload_summaries(Path(args.output_root))
