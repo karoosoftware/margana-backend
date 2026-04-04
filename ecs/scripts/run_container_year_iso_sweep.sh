@@ -12,6 +12,17 @@ LOG_FILE="${1:-/Users/paulbradbury/IdeaProjects/margana-backend/tmp/container-ye
 
 mkdir -p "$(dirname "${LOG_FILE}")"
 
+last_iso_week_for_year() {
+  local year="$1"
+  python3 - "$year" <<'PY'
+from datetime import date
+import sys
+
+year = int(sys.argv[1])
+print(date(year, 12, 28).isocalendar().week)
+PY
+}
+
 run_week() {
   local year="$1"
   local week="$2"
@@ -31,7 +42,8 @@ run_week() {
 }
 
 {
-  for week in $(seq "${START_WEEK}" 53); do
+  start_year_last_week="$(last_iso_week_for_year "${START_YEAR}")"
+  for week in $(seq "${START_WEEK}" "${start_year_last_week}"); do
     run_week "${START_YEAR}" "${week}"
   done
 

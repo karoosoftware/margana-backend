@@ -358,6 +358,112 @@ This is the clearest current result:
 - cooldown is not the limiting factor in a forward year sweep
 - runtime is dominated by score attainment, especially for `hard`
 
+## Five-Year Sweep Result
+
+With:
+
+- `MAX_USAGE_TRIES=800`
+- `COOLDOWN_DAYS=365000`
+- current three-band model
+- current validation and week-completeness enforcement
+
+the completed five-year weekly run produced:
+
+- `261` weeks started
+- `261` weeks completed successfully
+- `261` weekly validations passed
+- `0` incomplete weeks
+- `0` tracebacks
+- `1827` total puzzle days generated
+- `261` madness days
+- `1566` non-madness days
+
+### Year Coverage
+
+- `2026`: `53/53` weeks completed
+- `2027`: `52/52` weeks completed
+- `2028`: `52/52` weeks completed
+- `2029`: `52/52` weeks completed
+- `2030`: `52/52` weeks completed
+
+### Band Distribution
+
+- `easy`: `381`
+- `medium`: `671`
+- `hard`: `514`
+- `skipped`: `261`
+
+### Score Summary By Band
+
+- `easy`
+  - average score: `167.0`
+  - range: `160-179`
+- `medium`
+  - average score: `186.9`
+  - range: `180-199`
+- `hard`
+  - average score: `210.1`
+  - range: `200-270`
+- `skipped`
+  - average score: `194.5`
+  - range: `160-265`
+
+### Attempt Summary By Band
+
+- `easy`
+  - average attempts: `6.8`
+  - median attempts: `5`
+- `medium`
+  - average attempts: `28.4`
+  - median attempts: `20`
+- `hard`
+  - average attempts: `112.7`
+  - median attempts: `75`
+- `skipped`
+  - average attempts: `1.1`
+  - median attempts: `1`
+
+Overall:
+
+- average attempts per written day: `43.7`
+- median attempts per written day: `14`
+
+### Anagram Summary
+
+Accepted puzzles used:
+
+- `8`
+- `9`
+- `10`
+
+By band:
+
+- `easy`: `9`, `10`
+- `medium`: `9`, `10`
+- `hard`: `8`, `9`, `10`
+- `skipped`: `9`, `10`
+
+### Rejection Summary
+
+Across the full five-year run:
+
+- `score_below_band`: `77,695`
+- `score_above_band`: `294`
+- `builder_exception`: `0`
+- `timeout`: `0`
+- `anagram_length` rejects: `0`
+- `usage_log_cooldown`: `2`
+
+### Usage-Log Observation
+
+The five-year run is the first strong evidence that the usage-log clash protection is functioning under realistic generation volume:
+
+- exact puzzle reuse remained extremely rare
+- but it did happen
+- `usage_log_cooldown` was triggered `2` times across `1827` generated days
+
+So the cooldown protection appears to be working, but exact board collisions are rare enough that they are not a material runtime driver.
+
 ## Current Comparison Baseline
 
 We are currently comparing:
@@ -411,6 +517,13 @@ Current recommendation:
 - keep week-completeness enforcement
 - keep the current diagnostic output
 - use `MAX_USAGE_TRIES=800` for scheduled generation unless ECS runtime cost becomes unacceptable
+
+The five-year result suggests this is now operationally viable:
+
+- generation completes reliably
+- validation remains clean
+- uniqueness is sufficient for at least a 5-year horizon
+- the remaining tradeoff is ECS runtime cost versus search strictness for `hard`
 
 Do not remove the new safety checks just to match old speed. The right target is:
 
